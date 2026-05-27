@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, parse
+from app.api.routes import diaries, health, parse, tasks, timetable
 from app.config import get_settings
 
 logging.basicConfig(
@@ -45,6 +45,9 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(parse.router, prefix=settings.ringo_api_prefix)
+    app.include_router(tasks.router, prefix=settings.ringo_api_prefix)
+    app.include_router(diaries.router, prefix=settings.ringo_api_prefix)
+    app.include_router(timetable.router, prefix=settings.ringo_api_prefix)
 
     return app
 

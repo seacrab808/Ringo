@@ -1,0 +1,98 @@
+import type {
+  NaturalLanguageParseResponse,
+  ParsedScheduleEvent,
+  PlannerTask,
+} from "@/types/schedule";
+import { getCategoryStyle } from "@/lib/categories";
+import { newTaskId } from "@/lib/planner-api";
+import { assignAutoListOrder } from "@/lib/task-sort";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+
+function getAuthHeaders(): HeadersInit {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("ringo_token");
+    if (token) headers["X-Ringo-Token"] = token;
+  }
+  return headers;
+}
+
+export async function parseSchedule(
+  text: string,
+  referenceDate?: string,
+): Promise<NaturalLanguageParseResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/parse/schedule`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      text,
+      reference_date: referenceDate,
+      timezone: "Asia/Seoul",
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Parse failed (${res.status})`);
+  }
+  return res.json();
+}
+
+function dtToIso(dt?: { date_time?: string | null; date?: string | null } | null): string | undefined {
+  if (!dt) return undefined;
+  if (dt.date_time) return dt.date_time;
+  if (dt.date) return `${dt.date}T23:59:59+09:00`;
+  return undefined;
+}
+
+function plannedDateFromEvent(
+  ev: ParsedScheduleEvent,
+  fallbackDate?: string,
+): string | undefined {
+  const start = dtToIso(ev.start ?? undefined);
+  if (start) return start.slice(0, 10);
+  const deadline = dtToIso(ev.deadline ?? undefined);
+  if (deadline) return deadline.slice(0, 10);
+  return fallbackDate;
+}
+
+export function eventsToTasks(
+  events: ParsedScheduleEvent[],
+  startOrder: number,
+  fallbackDate?: string,
+): PlannerTask[] {
+  const tasks: PlannerTask[] = events.map((ev, i) => {
+    const style = getCategoryStyle(ev.category);
+    const startIso = dtToIso(ev.start ?? undefined);
+    const plannedDate = plannedDateFromEvent(ev, fallbackDate);
+    return {
+      id: newTaskId(),
+      summary: ev.summary,
+      timetableLabel: ev.timetable_label?.trim() || ev.summary,
+      isTimeFixed: ev.is_time_fixed,
+      plannedDate,
+      startIso,
+      endIso: dtToIso(ev.end ?? undefined),
+      deadlineIso: dtToIso(ev.deadline ?? undefined),
+      category: ev.category,
+      categoryColor: ev.category_color ?? style.bg,
+      createdOrder: startOrder + i,
+      listOrder: startOrder + i,
+      completed: false,
+    };
+  });
+  return tasks;
+}
+
+export function mergeTasks(
+  existing: PlannerTask[],
+  incoming: PlannerTask[],
+): PlannerTask[] {
+  const maxOrder = existing.reduce((m, t) => Math.max(m, t.createdOrder), -1);
+  const adjusted = incoming.map((t, i) => ({
+    ...t,
+    createdOrder: maxOrder + 1 + i,
+  }));
+  return assignAutoListOrder([...existing, ...adjusted]);
+}

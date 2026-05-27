@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         validation_alias="OLLAMA_BASE_URL",
     )
     ollama_model: str = Field(
-        default="qwen2.5:14b-instruct",
+        default="llama3.2:latest",
         validation_alias="OLLAMA_MODEL",
     )
     ollama_timeout_seconds: float = Field(
@@ -49,6 +49,16 @@ class Settings(BaseSettings):
         default=60,
         validation_alias="DEFAULT_EVENT_DURATION_MINUTES",
     )
+
+    supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
+    supabase_service_role_key: str = Field(
+        default="",
+        validation_alias="SUPABASE_SERVICE_ROLE_KEY",
+    )
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url.strip() and self.supabase_service_role_key.strip())
 
     @property
     def cors_origin_list(self) -> list[str]:

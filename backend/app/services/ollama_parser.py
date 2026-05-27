@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from datetime import date as Date
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -45,7 +45,10 @@ Rules:
 6. `category` = lowercase slug string. Prefer: class, ta, research, health, personal, other — or infer slug for 외주→outsourcing, 회의→meeting, 개인일정→personal.
 7. Recurring classes: recurrence_rule WEEKLY, by_day, by_hour, semester_start/end when term dates given.
 8. Multiple events in one sentence → multiple objects in `events`.
-9. Unclear parts → unparsed_fragments array.
+9. EVERY object inside `events` MUST include its own `summary` string (never leave summary only at the root).
+10. Use reference_date weekday to resolve "이번주 금요일" correctly (금요일 = Friday of that week).
+11. "1시부터 5시까지" → start 13:00, end 17:00 on the same day.
+12. Unclear parts → unparsed_fragments array.
 
 Examples:
 - "이번주 금요일 오후 2시 딥러닝 수업" → timed, summary="딥러닝 수업", category="class", start 14:00 that Friday.
@@ -54,10 +57,57 @@ Examples:
 """
 
 
-def _build_user_prompt(req: NaturalLanguageParseRequest, ref: date) -> str:
+_WEEKDAY_KO = ("월", "화", "수", "목", "금", "토", "일")
+_KOREAN_WEEKDAY_IDX = {name: i for i, name in enumerate(_WEEKDAY_KO)}
+
+
+def _resolve_target_date_from_weekday(user_text: str, ref: Date) -> Date | None:
+    """Parse 이번주/다음주 + 요일 → concrete date."""
+    text = user_text.replace(" ", "")
+    for name, target_wd in _KOREAN_WEEKDAY_IDX.items():
+        if f"{name}요일" not in user_text and f"{name}요일" not in text:
+            continue
+        days = (target_wd - ref.weekday()) % 7
+        if "다음주" in text or "차주" in text:
+            days = (target_wd - ref.weekday()) % 7 + 7
+        elif "이번주" in text or "이번 주" in user_text:
+            if days == 0 and target_wd != ref.weekday():
+                days = target_wd - ref.weekday()
+        else:
+            # bare "금요일" → upcoming that weekday (not past)
+            if days == 0 and ref.weekday() != target_wd:
+                days = 7
+        return ref + timedelta(days=days)
+    return None
+
+
+def _adjust_datetime_for_korean_weekday(
+    user_text: str,
+    ref: Date,
+    cal: CalendarDateTime | None,
+) -> CalendarDateTime | None:
+    """Force date to match Korean weekday phrase when model picks wrong day."""
+    if cal is None or cal.date_time is None:
+        return cal
+    target_date = _resolve_target_date_from_weekday(user_text, ref)
+    if target_date is None:
+        return cal
+    current = cal.date_time.date()
+    if current != target_date:
+        dt = cal.date_time.replace(
+            year=target_date.year,
+            month=target_date.month,
+            day=target_date.day,
+        )
+        return CalendarDateTime(date_time=dt, time_zone=cal.time_zone)
+    return cal
+
+
+def _build_user_prompt(req: NaturalLanguageParseRequest, ref: Date) -> str:
     schema = json.dumps(parsed_event_json_schema(), ensure_ascii=False)
+    weekday = _WEEKDAY_KO[ref.weekday()]
     return (
-        f"reference_date: {ref.isoformat()}\n"
+        f"reference_date: {ref.isoformat()} ({weekday}요일)\n"
         f"timezone: {req.timezone}\n"
         f"allow_multiple_events: {req.allow_multiple_events}\n\n"
         f"JSON schema for your response:\n{schema}\n\n"
@@ -146,17 +196,54 @@ def _coerce_schedule_kind(raw: dict[str, Any], is_fixed: bool, has_deadline: boo
     return ScheduleKind.FLEXIBLE
 
 
-def _coerce_event(raw: dict[str, Any], user_text: str, tz: str) -> ParsedScheduleEvent:
+def _resolve_summary(
+    raw: dict[str, Any],
+    *,
+    root_summary: str = "",
+    user_text: str,
+) -> str:
+    for key in ("summary", "title", "name", "event_title", "timetable_label"):
+        val = raw.get(key) or (root_summary if key == "summary" else None)
+        if val and str(val).strip():
+            return str(val).strip()
+    if root_summary:
+        return root_summary
+    # Minimal fallback: strip common time/date filler from user message
+    import re
+
+    guess = re.sub(
+        r"(이번\s*주|이번주|내일|모레|오늘|다음\s*주|"
+        r"[월화수목금토일]요일|오전|오후|부터|까지|에|있어|있음|있다|함|"
+        r"\d+\s*시(\s*\d+\s*분)?(\s*부터|\s*까지)?)",
+        " ",
+        user_text,
+    )
+    guess = re.sub(r"\s+", " ", guess).strip(" .,()")
+    return guess[:80] if guess else "새 일정"
+
+
+def _coerce_event(
+    raw: dict[str, Any],
+    user_text: str,
+    tz: str,
+    *,
+    root_summary: str = "",
+    reference_date: Date | None = None,
+) -> ParsedScheduleEvent:
     start = _coerce_calendar_dt(raw.get("start"), tz)
     end = _coerce_calendar_dt(raw.get("end"), tz)
+    if reference_date is not None:
+        start = _adjust_datetime_for_korean_weekday(user_text, reference_date, start)
+        end = _adjust_datetime_for_korean_weekday(user_text, reference_date, end)
     deadline = _coerce_calendar_dt(raw.get("deadline"), tz)
     is_fixed = bool(raw.get("is_time_fixed", False))
     if start is not None and start.date_time is not None and not is_fixed:
         is_fixed = True
 
     kind = _coerce_schedule_kind(raw, is_fixed, deadline is not None)
+    summary = _resolve_summary(raw, root_summary=root_summary, user_text=user_text)
     ev = ParsedScheduleEvent(
-        summary=str(raw.get("summary", "")).strip(),
+        summary=summary,
         description=raw.get("description"),
         location=raw.get("location"),
         start=start,
@@ -171,7 +258,7 @@ def _coerce_event(raw: dict[str, Any], user_text: str, tz: str) -> ParsedSchedul
         timetable_label=raw.get("timetable_label"),
         category=_coerce_category_slug(raw.get("category")),
         category_color=raw.get("category_color"),
-        confidence=float(raw.get("confidence", 0.8)),
+        confidence=float(raw.get("confidence") if raw.get("confidence") is not None else 0.8),
         raw_user_text=user_text,
         parsing_notes=raw.get("parsing_notes"),
     )
@@ -190,6 +277,21 @@ class OllamaScheduleParser:
         self._settings = settings or get_settings()
         self._client = client
 
+    def _ollama_error_message(self, resp: httpx.Response) -> str:
+        model = self._settings.ollama_model
+        try:
+            data = resp.json()
+            detail = data.get("error") or data.get("detail") or resp.text
+        except Exception:
+            detail = resp.text or "404 Not Found"
+        if "not found" in str(detail).lower():
+            return (
+                f'Ollama 모델 "{model}" 이(가) 없습니다. '
+                f"터미널에서 `ollama pull {model}` 또는 `ollama list`로 설치된 이름을 "
+                f"backend/.env 의 OLLAMA_MODEL에 맞춰 주세요. ({detail})"
+            )
+        return f"Ollama error: {detail}"
+
     def _reference_date(self, req: NaturalLanguageParseRequest) -> Date:
         if req.reference_date is not None:
             return req.reference_date
@@ -205,7 +307,7 @@ class OllamaScheduleParser:
         t0 = time.perf_counter()
 
         raw_json = await self._call_ollama(req, ref, client=client)
-        events, unparsed = self._extract_events(raw_json, req.text, req.timezone)
+        events, unparsed = self._extract_events(raw_json, req.text, req.timezone, ref)
 
         latency_ms = (time.perf_counter() - t0) * 1000
         return NaturalLanguageParseResponse(
@@ -248,8 +350,13 @@ class OllamaScheduleParser:
         try:
             assert http is not None
             resp = await http.post(url, json=payload)
+            if resp.status_code == 404:
+                err_msg = self._ollama_error_message(resp)
+                raise OllamaConnectionError(err_msg)
             resp.raise_for_status()
             body = resp.json()
+        except OllamaConnectionError:
+            raise
         except httpx.HTTPError as exc:
             logger.exception("Ollama request failed")
             raise OllamaConnectionError(f"Ollama unreachable: {exc}") from exc
@@ -271,10 +378,13 @@ class OllamaScheduleParser:
         data: dict[str, Any],
         user_text: str,
         tz: str,
+        reference_date: Date | None = None,
     ) -> tuple[list[ParsedScheduleEvent], list[str]]:
         unparsed: list[str] = list(data.get("unparsed_fragments") or [])
+        root_summary = str(data.get("summary") or "").strip()
+
         raw_events = data.get("events")
-        if raw_events is None and "summary" in data:
+        if raw_events is None and (root_summary or data.get("start") or data.get("is_time_fixed")):
             raw_events = [data]
         if not raw_events:
             return [], unparsed
@@ -284,12 +394,18 @@ class OllamaScheduleParser:
             if not isinstance(item, dict):
                 continue
             try:
-                ev = _coerce_event(item, user_text, tz)
+                ev = _coerce_event(
+                    item,
+                    user_text,
+                    tz,
+                    root_summary=root_summary,
+                    reference_date=reference_date,
+                )
                 ParsedScheduleEvent.model_validate(ev.model_dump())
                 events.append(ev)
             except (ValidationError, ValueError) as exc:
                 logger.warning("Skipping invalid event: %s", exc)
-                unparsed.append(str(item.get("summary", item)))
+                unparsed.append(str(item.get("summary") or root_summary or item))
 
         return events, unparsed
 
