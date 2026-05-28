@@ -46,6 +46,18 @@ export default function SettingsPage() {
           </h2>
           <RecurringTaskForm />
         </section>
+
+        <section className="rounded-3xl bg-white/90 p-5 shadow-sm ring-1 ring-orange-100">
+          <h2 className="mb-2 text-base font-semibold text-stone-800">습관 · GitHub</h2>
+          <p className="text-sm text-stone-600">
+            습관 트래커와 GitHub 커밋 연동은{" "}
+            <Link href="/habits" className="font-medium text-orange-700 underline">
+              습관 페이지
+            </Link>
+            에서 관리해요. 서버 <code className="text-xs">GITHUB_TOKEN</code> 설정이
+            필요합니다.
+          </p>
+        </section>
       </div>
     </div>
   );

@@ -131,16 +131,15 @@ export function SogangMenuView() {
           <div className="mx-auto max-w-lg rounded-2xl bg-amber-50 px-4 py-4 text-sm text-amber-900 ring-1 ring-amber-200">
             {data.error}
             <p className="mt-2 text-xs text-amber-800">
-              학교 사이트는 일부 서버 IP에서 차단될 수 있어요. 브라우저에서{" "}
               <a
                 href={data.source_url}
                 className="underline"
                 target="_blank"
                 rel="noreferrer"
               >
-                생활정보 식단표
+                서강대 생활정보 식단표
               </a>
-              를 확인해 주세요.
+              에서도 확인할 수 있어요.
             </p>
           </div>
         )}

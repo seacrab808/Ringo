@@ -14,6 +14,7 @@ class FewShotExample:
     title: str
     topics: list[str]
     body: str
+    course: str = ""
 
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -24,6 +25,7 @@ def parse_few_shot_file(path: Path) -> FewShotExample | None:
     week = path.stem
     title = week
     topics: list[str] = []
+    course = ""
 
     m = _FRONTMATTER_RE.match(raw)
     body = raw[m.end() :] if m else raw
@@ -34,6 +36,8 @@ def parse_few_shot_file(path: Path) -> FewShotExample | None:
                 week = line.split(":", 1)[1].strip().strip('"')
             elif line.startswith("title:"):
                 title = line.split(":", 1)[1].strip().strip('"')
+            elif line.startswith("course:"):
+                course = line.split(":", 1)[1].strip().strip('"')
             elif line.startswith("topics:"):
                 val = line.split(":", 1)[1].strip()
                 topics = [
@@ -44,7 +48,14 @@ def parse_few_shot_file(path: Path) -> FewShotExample | None:
 
     if not topics:
         topics = [title, week]
-    return FewShotExample(path=path, week=week, title=title, topics=topics, body=body.strip())
+    return FewShotExample(
+        path=path,
+        week=week,
+        title=title,
+        topics=topics,
+        body=body.strip(),
+        course=course,
+    )
 
 
 def load_few_shot_catalog(directory: Path) -> list[FewShotExample]:
@@ -86,7 +97,9 @@ def select_few_shots(
         score = 0.0
         if _week_in_query(query, ex.week):
             score += 10.0
-        meta_tokens = _tokenize(" ".join([ex.week, ex.title, *ex.topics]))
+        if ex.course and ex.course in query:
+            score += 6.0
+        meta_tokens = _tokenize(" ".join([ex.week, ex.title, ex.course, *ex.topics]))
         score += len(q_tokens & meta_tokens) * 1.5
         body_tokens = _tokenize(ex.body[:1500])
         score += len(q_tokens & body_tokens) * 0.3

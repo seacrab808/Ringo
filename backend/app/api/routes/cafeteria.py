@@ -24,7 +24,7 @@ async def get_sogang_bw_menu(
 ) -> SogangCafeteriaWeek:
     """
     서강대 베르크만스우정원(BW관) 우정학식 주간 식단.
-    공식 API: POST https://www.sogang.ac.kr/api/v1/mainKo/menuList (configId=1)
+    공식 API: POST https://www.sogang.ac.kr/api/api/v1/mainKo/menuList (configId=1)
     """
     start, end = week_range_mon_fri()
     if week_offset:

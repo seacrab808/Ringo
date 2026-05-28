@@ -3,13 +3,23 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, LayoutGrid, MessageCircle, Settings, UtensilsCrossed } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  LayoutGrid,
+  MessageCircle,
+  Settings,
+  Sparkles,
+  UtensilsCrossed,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/planner", label: "오늘", icon: LayoutGrid, exact: true },
   { href: "/chat", label: "채팅", icon: MessageCircle },
   { href: "/calendar", label: "캘린더", icon: CalendarDays },
+  { href: "/habits", label: "습관", icon: CheckCircle2 },
+  { href: "/reports", label: "리포트", icon: Sparkles },
   { href: "/cafeteria", label: "우정학식", icon: UtensilsCrossed },
   { href: "/settings", label: "설정", icon: Settings },
 ] as const;

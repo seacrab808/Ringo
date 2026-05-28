@@ -12,6 +12,9 @@
 | **캘린더** | 월간 보기, 날짜별 일정 개수, 클릭 시 플래너로 이동 |
 | **타임테이블** | 06:00 ~ 익일 05:00, 24칸 (모트모트 축) |
 | **저장** | localStorage(기본) 또는 Supabase(선택) |
+| **습관** | 일/주/월 트래커, GitHub 커밋 연동 |
+| **우정학식** | 서강대 BW관 주간 식단표 |
+| **AI 리포트** | 주간·월간 회고 (일정·일기·습관 → Ollama) |
 
 ### 화면
 
@@ -20,7 +23,11 @@
 | `/planner` | 오늘 플래너 (채팅 패널 + Task + Timetable + 일기) |
 | `/chat` | Ringo 전용 채팅 화면 |
 | `/calendar` | 월간 캘린더 |
+| `/habits` | 습관 트래커 (일·주·월) |
+| `/reports` | AI 주간·월간 리포트 |
+| `/cafeteria` | 우정학식 식단 |
 | `/tasks/[id]` | 노션형 Task 페이지 (메모·PDF·학습지) |
+| `/settings` | 카테고리·반복 일정·GitHub |
 
 ---
 
@@ -134,6 +141,11 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8001
 | `GET` | `/api/v1/diaries?from=&to=` | 일기 목록 |
 | `PUT` | `/api/v1/diaries/{date}` | 일기 upsert |
 | `GET` | `/api/v1/timetable/{date}` | 24h 타임블록 |
+| `GET` | `/api/v1/habits` | 습관·로그·통계 |
+| `POST` | `/api/v1/habits/github/sync` | GitHub 커밋 → 습관 반영 |
+| `GET` | `/api/v1/cafeteria/sogang/bw` | 우정학식 주간 메뉴 |
+| `GET` | `/api/v1/reports` | 저장된 AI 리포트 조회 |
+| `POST` | `/api/v1/reports/generate` | AI 주/월 리포트 생성 |
 | `GET` | `/health` | 서버·DB 상태 |
 
 선택: 백엔드 `RINGO_API_TOKEN` 설정 시 요청 헤더 `X-Ringo-Token` 필요 ([docs/AUTH.md](docs/AUTH.md)).
@@ -166,10 +178,33 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8001
 | 1 | FastAPI + Ollama 자연어 파싱, Pydantic 스키마 | ✅ |
 | 2 | Next.js 플래너, 채팅, 확인 후 등록, Task DnD, 타임테이블 | ✅ |
 | 3 | Supabase 스키마, CRUD, 24h 타임테이블 API | ✅ |
-| 4 | 학기 반복 일정, 카테고리 커스터마이즈 (`/settings`) | ✅  |
-| 5 | 노션형 Task 페이지, PDF RAG·요약, 채팅 첨부 | ✅ 1단계 |
-| 6 | 습관 트래커, GitHub 커밋 연동 | |
-| 7 | 야간 리마인더, 주/월 AI 리포트 | |
+| 4 | 학기 반복 일정, 카테고리 커스터마이즈 (`/settings`) | ✅ |
+| 5 | 노션형 Task 페이지, PDF/PPT·학습지, 채팅 첨부·일정 연동 | ✅ |
+| 6 | 습관 트래커, GitHub 커밋 연동 | ✅ |
+| 7 | 서강 우정학식 식단 API 연동 | ✅ |
+| 8 | **주간·월간 AI 리포트** (`/reports`, Ollama 회고) | ✅ |
+| 9 | 야간 리마인더 (미완 일정·습관 푸시/이메일) | 🔜 |
+| 10 | Google Calendar 양방향 동기화 | 🔜 |
+| 11 | 학습지 품질 — qwen2.5:7b, 참고 PDF few-shot ([docs/STUDY_GUIDE_QUALITY.md](docs/STUDY_GUIDE_QUALITY.md)) | ✅ |
+| 12 | 습관·리포트 설정 UI (목표 수정, 리포트 프롬프트) | 🔜 |
+| 13 | PWA / 모바일 홈 화면·로컬 알림 | 🔜 |
+| 14 | 멀티 디바이스 실시간 동기화 (Supabase Realtime) | 🔜 |
+
+### AI 리포트 사용법
+
+1. 사이드바 **리포트** → 주간 / 월간 선택  
+2. **리포트 생성** — 일정·일기·습관 데이터를 모아 Ollama가 마크다운 회고 작성  
+3. Supabase 없이 localStorage만 쓸 때는 브라우저의 Task·일기를 `client_context`로 전송  
+4. 생성 결과는 `backend/storage/reports/`에 캐시 (재조회·다시 생성 가능)
+
+선택 env (`backend/.env`):
+
+```env
+OLLAMA_REPORT_MODEL=qwen2.5:7b   # 비우면 OLLAMA_MODEL
+OLLAMA_REPORT_NUM_PREDICT=2048
+```
+
+학습지 few-shot PDF 넣기: `backend/data/study_guide_import/` → `python scripts/ingest_study_guide_examples.py`
 
 제품 상세: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md)
 

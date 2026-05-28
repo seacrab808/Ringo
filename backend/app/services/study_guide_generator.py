@@ -45,7 +45,7 @@ class StudyGuideGenerator:
             q_vec = await self._embedder.embed(query, client=client)
             if q_vec:
                 for ex in catalog:
-                    meta = f"{ex.week} {ex.title} {' '.join(ex.topics)}"
+                    meta = f"{ex.week} {ex.title} {ex.course} {' '.join(ex.topics)}"
                     ex_vec = await self._embedder.embed(meta[:2000], client=client)
                     if ex_vec:
                         emb_scores[ex.path.name] = cosine_similarity(q_vec, ex_vec)

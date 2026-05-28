@@ -14,11 +14,15 @@ export function PlannerHomeRedirect() {
   useEffect(() => {
     if (!hydrated || didRedirect.current) return;
     didRedirect.current = true;
-    if (
+    const keep =
       pathname === "/planner" ||
       pathname.startsWith("/tasks/") ||
-      pathname === "/cafeteria"
-    ) {
+      pathname === "/cafeteria" ||
+      pathname === "/habits" ||
+      pathname === "/chat" ||
+      pathname === "/calendar" ||
+      pathname === "/settings";
+    if (keep) {
       return;
     }
     if (pathname !== "/planner") {

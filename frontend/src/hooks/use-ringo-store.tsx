@@ -139,6 +139,7 @@ interface RingoContextValue {
   formattedDate: string;
   tasksForDay: PlannerTask[];
   allTasks: PlannerTask[];
+  allDiaries: Record<string, string>;
   taskCountByDate: Record<string, number>;
   diary: string;
   setDiary: (text: string) => void;
@@ -781,6 +782,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     formattedDate,
     tasksForDay,
     allTasks: tasks,
+    allDiaries: diaries,
     taskCountByDate,
     diary,
     setDiary,

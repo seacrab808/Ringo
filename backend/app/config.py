@@ -140,6 +140,33 @@ class Settings(BaseSettings):
         default="storage/chat_attachments",
         validation_alias="CHAT_ATTACHMENT_STORAGE_DIR",
     )
+    habit_storage_dir: str = Field(
+        default="storage/habits",
+        validation_alias="HABIT_STORAGE_DIR",
+    )
+    github_username: str = Field(default="", validation_alias="GITHUB_USERNAME")
+    github_token: str = Field(default="", validation_alias="GITHUB_TOKEN")
+    ollama_report_model: str = Field(
+        default="",
+        validation_alias="OLLAMA_REPORT_MODEL",
+        description="주/월 리포트용 모델; empty = OLLAMA_MODEL",
+    )
+    ollama_report_num_predict: int = Field(
+        default=2048,
+        validation_alias="OLLAMA_REPORT_NUM_PREDICT",
+    )
+    ollama_report_temperature: float = Field(
+        default=0.4,
+        validation_alias="OLLAMA_REPORT_TEMPERATURE",
+    )
+    ollama_report_timeout_seconds: float = Field(
+        default=120.0,
+        validation_alias="OLLAMA_REPORT_TIMEOUT_SECONDS",
+    )
+    report_storage_dir: str = Field(
+        default="storage/reports",
+        validation_alias="REPORT_STORAGE_DIR",
+    )
     supabase_storage_bucket: str = Field(
         default="ringo-attachments",
         validation_alias="SUPABASE_STORAGE_BUCKET",
@@ -148,6 +175,11 @@ class Settings(BaseSettings):
     @property
     def study_guide_model(self) -> str:
         m = self.ollama_study_guide_model.strip()
+        return m or self.ollama_model
+
+    @property
+    def report_model(self) -> str:
+        m = self.ollama_report_model.strip()
         return m or self.ollama_model
 
     @property

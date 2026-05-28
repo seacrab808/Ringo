@@ -13,7 +13,8 @@ from app.schemas.cafeteria import CafeteriaDayMenu, CafeteriaMenuItem, SogangCaf
 
 logger = logging.getLogger(__name__)
 
-SOGANG_MENU_API = "https://www.sogang.ac.kr/api/v1/mainKo/menuList"
+# Nuxt apiBase is https://www.sogang.ac.kr/api/ → full path uses /api/api/v1/...
+SOGANG_MENU_API = "https://www.sogang.ac.kr/api/api/v1/mainKo/menuList"
 BW_HALL_CONFIG_ID = 1
 KST = ZoneInfo("Asia/Seoul")
 _WEEKDAY_KO = ("월", "화", "수", "목", "금", "토", "일")
@@ -119,11 +120,19 @@ class SogangCafeteriaClient:
                 raw = resp.json()
         except httpx.HTTPStatusError as exc:
             logger.warning("Sogang menu API HTTP %s", exc.response.status_code)
+            stale = self._load_cache(start, end) if use_cache else None
+            if stale and stale.days:
+                stale.cached = True
+                stale.error = (
+                    f"최신 식단을 가져오지 못했습니다 (HTTP {exc.response.status_code}). "
+                    "아래는 이전에 저장된 데이터입니다."
+                )
+                return stale
             return self._error_week(
                 start,
                 end,
                 f"서강대 식단 API 접근 실패 (HTTP {exc.response.status_code}). "
-                "학교 네트워크/VPN에서 다시 시도하거나 공식 페이지를 확인해 주세요.",
+                "잠시 후 다시 시도하거나 공식 페이지를 확인해 주세요.",
             )
         except Exception as exc:
             logger.warning("Sogang menu API error: %s", exc)
@@ -144,12 +153,13 @@ class SogangCafeteriaClient:
 
         days: list[CafeteriaDayMenu] = []
         for row in menu_list:
-            menu_date = str(row.get("menuDate") or "")
+            menu_date_raw = str(row.get("menuDate") or "")
             try:
-                d = date.fromisoformat(menu_date[:10])
+                d = _parse_api(menu_date_raw[:10])
                 weekday = _WEEKDAY_KO[d.weekday()]
+                menu_date = d.isoformat()
             except ValueError:
-                d = None
+                menu_date = menu_date_raw[:10]
                 weekday = ""
 
             items: list[CafeteriaMenuItem] = []
@@ -165,7 +175,7 @@ class SogangCafeteriaClient:
 
             days.append(
                 CafeteriaDayMenu(
-                    date=menu_date[:10] if menu_date else "",
+                    date=menu_date,
                     weekday=weekday,
                     items=items,
                 )

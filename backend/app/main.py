@@ -11,8 +11,10 @@ from app.api.routes import (
     categories,
     chat,
     diaries,
+    habits,
     health,
     parse,
+    reports,
     task_pages,
     tasks,
     timetable,
@@ -87,6 +89,8 @@ def create_app() -> FastAPI:
     app.include_router(task_pages.router, prefix=settings.ringo_api_prefix)
     app.include_router(diaries.router, prefix=settings.ringo_api_prefix)
     app.include_router(timetable.router, prefix=settings.ringo_api_prefix)
+    app.include_router(habits.router, prefix=settings.ringo_api_prefix)
+    app.include_router(reports.router, prefix=settings.ringo_api_prefix)
 
     return app
 
