@@ -5,6 +5,11 @@ from zoneinfo import ZoneInfo
 from app.config import get_settings
 from app.schemas.planner import TimetableBlockOut, TimetableDayOut
 
+SLOTS_PER_HOUR = 6
+MINUTES_PER_SLOT = 10
+TIMETABLE_HOUR_COUNT = 24
+TIMETABLE_SLOT_COUNT = TIMETABLE_HOUR_COUNT * SLOTS_PER_HOUR
+
 
 def _parse_row_times(row: dict) -> tuple[datetime | None, datetime | None]:
     start_raw = row.get("start_at")
@@ -24,11 +29,10 @@ def build_timetable_for_day(rows: list[dict], day: date) -> TimetableDayOut:
     settings = get_settings()
     tz = ZoneInfo(settings.ringo_timezone)
     start_hour = settings.timetable_day_start_hour
-    slot_count = 24
 
     day_local = datetime(day.year, day.month, day.day, tzinfo=tz)
     axis_start = day_local.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-    axis_end = axis_start + timedelta(hours=slot_count)
+    axis_end = axis_start + timedelta(minutes=TIMETABLE_SLOT_COUNT * MINUTES_PER_SLOT)
 
     blocks: list[TimetableBlockOut] = []
     for row in rows:
@@ -52,10 +56,11 @@ def build_timetable_for_day(rows: list[dict], day: date) -> TimetableDayOut:
         start_minutes = (clamped_start - axis_start_utc).total_seconds() / 60
         end_minutes = (clamped_end - axis_start_utc).total_seconds() / 60
 
-        start_slot = int(start_minutes // 60)
-        end_slot = int((end_minutes + 59) // 60)
+        start_slot = int(start_minutes // MINUTES_PER_SLOT)
+        end_slot = int((end_minutes + MINUTES_PER_SLOT - 1) // MINUTES_PER_SLOT)
         span = max(1, end_slot - start_slot)
-        start_slot = max(0, min(23, start_slot))
+        start_slot = max(0, min(TIMETABLE_SLOT_COUNT - 1, start_slot))
+        span = min(TIMETABLE_SLOT_COUNT - start_slot, span)
 
         blocks.append(
             TimetableBlockOut(
@@ -75,6 +80,6 @@ def build_timetable_for_day(rows: list[dict], day: date) -> TimetableDayOut:
     return TimetableDayOut(
         date=day,
         day_start_hour=start_hour,
-        slot_count=slot_count,
+        slot_count=TIMETABLE_SLOT_COUNT,
         blocks=blocks,
     )

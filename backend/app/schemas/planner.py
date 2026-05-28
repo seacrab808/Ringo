@@ -77,8 +77,8 @@ class TimetableBlockOut(BaseModel):
     timetable_label: str
     category: str
     category_color: str
-    start_slot: int = Field(ge=0, le=23)
-    span: int = Field(ge=1, le=24)
+    start_slot: int = Field(ge=0, le=143)
+    span: int = Field(ge=1, le=144)
     start_at: datetime
     end_at: datetime
 

@@ -22,7 +22,7 @@ async def health() -> dict:
         "database": database,
         "timetable": {
             "day_start_hour": settings.timetable_day_start_hour,
-            "slot_count": 24,
+            "slot_count": 144,
         },
     }
 

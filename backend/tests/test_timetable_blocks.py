@@ -22,7 +22,7 @@ def test_block_on_motemote_axis():
         }
     ]
     out = build_timetable_for_day(rows, day)
-    assert out.slot_count == 24
+    assert out.slot_count == 144
     assert len(out.blocks) == 1
-    assert out.blocks[0].start_slot == 8  # 14:00 is 8h after 06:00
-    assert out.blocks[0].span == 1
+    assert out.blocks[0].start_slot == 48  # 14:00 is 8h after 06:00 → 48 × 10min slots
+    assert out.blocks[0].span == 6

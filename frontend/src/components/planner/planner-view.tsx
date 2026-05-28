@@ -42,21 +42,25 @@ export function PlannerView() {
         />
       </div>
 
-      <div className="mx-auto hidden min-h-0 w-full max-w-[1600px] flex-1 gap-4 px-4 pb-4 md:px-6 md:pb-6 lg:grid lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]">
+      <div className="mx-auto hidden min-h-0 w-full max-w-[1600px] flex-1 gap-3 px-4 pb-4 md:gap-4 md:px-6 md:pb-5 lg:grid lg:grid-cols-[minmax(400px,440px)_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col">
           <ChatPanel className="h-full min-h-0" />
         </div>
-        <div className="flex min-h-0 flex-col gap-4">
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
+        <div className="flex min-h-0 min-w-0 flex-col gap-3">
+          <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,240px)]">
             <TaskList
-              className="h-full"
+              className="h-full min-h-0"
               tasks={tasksForDay}
               onDragEnd={onDragEnd}
               onToggleComplete={toggleComplete}
               onDelete={deleteTask}
               onEdit={setEditingTask}
             />
-            <Timetable className="h-full" tasks={tasksForDay} dayIso={selectedDate} />
+            <Timetable
+              className="h-full min-h-0"
+              tasks={tasksForDay}
+              dayIso={selectedDate}
+            />
           </div>
           <DiarySection value={diary} onChange={setDiary} />
         </div>

@@ -116,11 +116,14 @@ export function TaskList({
                             >
                               <p
                                 className={cn(
-                                  "font-medium text-stone-900 hover:underline",
+                                  "flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-medium leading-snug text-stone-900",
                                   task.completed && "line-through opacity-60",
                                 )}
                               >
-                                {task.summary}
+                                <span className="shrink-0 text-stone-700">
+                                  {cat.label}
+                                </span>
+                                <span className="hover:underline">{task.summary}</span>
                               </p>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                 {task.recurrenceInstance && (
@@ -129,12 +132,6 @@ export function TaskList({
                                     매주
                                   </Badge>
                                 )}
-                                <Badge
-                                  variant="secondary"
-                                  className="rounded-lg bg-white/70 text-[10px] font-normal text-stone-700"
-                                >
-                                  {cat.label}
-                                </Badge>
                                 {task.isTimeFixed && task.startIso && (
                                   <span className="text-[11px] font-medium text-stone-600">
                                     {formatTimeRange(task.startIso, task.endIso)}
