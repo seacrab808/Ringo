@@ -19,6 +19,7 @@ interface TaskListProps {
   onDragEnd: (source: number, dest: number) => void;
   onToggleComplete: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (task: PlannerTask) => void;
   className?: string;
 }
 
@@ -27,6 +28,7 @@ export function TaskList({
   onDragEnd,
   onToggleComplete,
   onDelete,
+  onEdit,
   className,
 }: TaskListProps) {
   const [dndReady, setDndReady] = useState(false);
@@ -107,10 +109,14 @@ export function TaskList({
                             >
                               {task.completed ? "✓" : ""}
                             </button>
-                            <div className="min-w-0 flex-1">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left"
+                              onClick={() => onEdit(task)}
+                            >
                               <p
                                 className={cn(
-                                  "font-medium text-stone-900",
+                                  "font-medium text-stone-900 hover:underline",
                                   task.completed && "line-through opacity-60",
                                 )}
                               >
@@ -145,7 +151,7 @@ export function TaskList({
                                   </span>
                                 )}
                               </div>
-                            </div>
+                            </button>
                             <div className="mt-0.5 flex shrink-0 flex-col items-center gap-0.5">
                               <button
                                 type="button"

@@ -41,6 +41,11 @@ import {
   expandTasksForDate,
   parseInstanceId,
 } from "@/lib/recurrence";
+import {
+  createWelcomeMessages,
+  getPlannerDayIso,
+} from "@/lib/planner-day";
+import { applyTaskEdit, type TaskEditPatch } from "@/lib/task-edit";
 import { filterTasksForDate, getTaskDateKey } from "@/lib/task-date";
 import {
   assignAutoListOrder,
@@ -48,6 +53,7 @@ import {
   orderByListOrder,
   reorderTasks,
 } from "@/lib/task-sort";
+import { TaskEditSheet } from "@/components/task/task-edit-sheet";
 import type {
   CategoryItem,
   ChatMessage,
@@ -56,7 +62,7 @@ import type {
   TaskRecurrence,
 } from "@/types/schedule";
 
-const STORAGE_KEY = "ringo-planner-v5";
+const STORAGE_KEY = "ringo-planner-v6";
 
 interface RingoPersist {
   tasks: PlannerTask[];
@@ -65,10 +71,11 @@ interface RingoPersist {
   categories?: CategoryItem[];
   selectedDate: string;
   calendarMonth: string;
+  lastPlannerSessionDay?: string;
 }
 
 function todayIso(): string {
-  return format(new Date(), "yyyy-MM-dd");
+  return getPlannerDayIso();
 }
 
 function monthIso(d = new Date()): string {
@@ -157,6 +164,11 @@ interface RingoContextValue {
     startIso?: string;
     endIso?: string;
   }) => void;
+  updateTask: (id: string, patch: TaskEditPatch) => void;
+  getTasksForDate: (dateIso: string) => PlannerTask[];
+  editingTask: PlannerTask | null;
+  setEditingTask: (task: PlannerTask | null) => void;
+  resetChat: () => void;
   hydrated: boolean;
 }
 
@@ -167,18 +179,24 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   const [calendarMonth, setCalendarMonth] = useState(monthIso);
   const [tasks, setTasks] = useState<PlannerTask[]>(SAMPLE_TASKS);
   const [diaries, setDiaries] = useState<Record<string, string>>({});
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "ringo",
-      text: "안녕! 나는 Ringo 🐿️ 일정을 편하게 말해 줘. 파싱한 뒤 확인하고 등록할 수 있어!",
-      at: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(createWelcomeMessages());
   const [parsing, setParsing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [dbEnabled, setDbEnabled] = useState(false);
   const [categories, setCategories] = useState<CategoryItem[]>(defaultCategoryItems());
+  const [lastPlannerSessionDay, setLastPlannerSessionDay] = useState(todayIso);
+  const [editingTask, setEditingTask] = useState<PlannerTask | null>(null);
+
+  const beginPlannerSession = useCallback((plannerDay: string) => {
+    setSelectedDate(plannerDay);
+    setCalendarMonth(format(new Date(plannerDay + "T12:00:00"), "yyyy-MM"));
+    setMessages(createWelcomeMessages());
+    setLastPlannerSessionDay(plannerDay);
+  }, []);
+
+  const resetChat = useCallback(() => {
+    setMessages(createWelcomeMessages());
+  }, []);
 
   useEffect(() => {
     setCategoryRegistry(categories);
@@ -189,20 +207,29 @@ export function RingoProvider({ children }: { children: ReactNode }) {
 
     async function hydrate() {
       const saved = loadPersist();
-      const initialDate = saved?.selectedDate ?? todayIso();
-
+      const plannerToday = getPlannerDayIso();
       const initialCategories = saved?.categories?.length
         ? saved.categories
         : defaultCategoryItems();
       setCategories(initialCategories);
       setCategoryRegistry(initialCategories);
 
+      const isNewPlannerDay =
+        !saved?.lastPlannerSessionDay || saved.lastPlannerSessionDay !== plannerToday;
+
       if (saved) {
         setTasks(ensureListOrder(saved.tasks.length ? saved.tasks : SAMPLE_TASKS));
         setDiaries(saved.diaries ?? {});
-        setMessages(saved.messages);
-        setSelectedDate(saved.selectedDate);
-        setCalendarMonth(saved.calendarMonth ?? monthIso());
+        if (isNewPlannerDay) {
+          beginPlannerSession(plannerToday);
+        } else {
+          setMessages(saved.messages);
+          setSelectedDate(saved.selectedDate);
+          setCalendarMonth(saved.calendarMonth ?? monthIso());
+          setLastPlannerSessionDay(saved.lastPlannerSessionDay ?? plannerToday);
+        }
+      } else {
+        beginPlannerSession(plannerToday);
       }
 
       if (USE_RINGO_DB && !cancelled) {
@@ -210,7 +237,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
           const health = await fetchHealth();
           if (isDatabaseConnected(health)) {
             setDbEnabled(true);
-            const { from, to } = syncDateRange(initialDate);
+            const { from, to } = syncDateRange(plannerToday);
             const [remoteTasks, remoteDiaries, remoteCats] = await Promise.all([
               fetchTasks(from, to),
               fetchDiaries(from, to),
@@ -240,7 +267,20 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [beginPlannerSession]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const tick = () => {
+      const plannerToday = getPlannerDayIso();
+      if (plannerToday !== lastPlannerSessionDay) {
+        beginPlannerSession(plannerToday);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [hydrated, lastPlannerSessionDay, beginPlannerSession]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -251,9 +291,24 @@ export function RingoProvider({ children }: { children: ReactNode }) {
       categories,
       selectedDate,
       calendarMonth,
+      lastPlannerSessionDay,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [tasks, diaries, messages, categories, selectedDate, calendarMonth, hydrated]);
+  }, [
+    tasks,
+    diaries,
+    messages,
+    categories,
+    selectedDate,
+    calendarMonth,
+    lastPlannerSessionDay,
+    hydrated,
+  ]);
+
+  const getTasksForDate = useCallback(
+    (dateIso: string) => orderByListOrder(expandTasksForDate(tasks, dateIso)),
+    [tasks],
+  );
 
   const tasksForDay = useMemo(
     () => orderByListOrder(expandTasksForDate(tasks, selectedDate)),
@@ -449,13 +504,15 @@ export function RingoProvider({ children }: { children: ReactNode }) {
 
   const toggleComplete = useCallback(
     (id: string) => {
+      const inst = parseInstanceId(id);
+      const baseId = inst?.templateId ?? id.split("@")[0];
       setTasks((prev) => {
         const next = prev.map((t) =>
-          t.id === id ? { ...t, completed: !t.completed } : t,
+          t.id === baseId ? { ...t, completed: !t.completed } : t,
         );
-        const updated = next.find((t) => t.id === id);
+        const updated = next.find((t) => t.id === baseId);
         if (dbEnabled && updated) {
-          patchTask(id, { completed: updated.completed }).catch(() => undefined);
+          patchTask(baseId, { completed: updated.completed }).catch(() => undefined);
         }
         return next;
       });
@@ -540,6 +597,26 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     [dbEnabled],
   );
 
+  const updateTask = useCallback(
+    (id: string, patch: TaskEditPatch) => {
+      const inst = parseInstanceId(id);
+      const baseId = inst?.templateId ?? id.split("@")[0];
+
+      setTasks((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== baseId) return t;
+          return applyTaskEdit(t, patch, inst?.dateIso);
+        });
+        const updated = next.find((t) => t.id === baseId);
+        if (dbEnabled && updated) {
+          patchTask(baseId, updated).catch(() => undefined);
+        }
+        return next;
+      });
+    },
+    [dbEnabled],
+  );
+
   const addRecurringTask = useCallback(
     (input: {
       summary: string;
@@ -601,10 +678,26 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     updateCategory,
     removeCategory,
     addRecurringTask,
+    updateTask,
+    getTasksForDate,
+    editingTask,
+    setEditingTask,
+    resetChat,
     hydrated,
   };
 
-  return <RingoContext.Provider value={value}>{children}</RingoContext.Provider>;
+  return (
+    <RingoContext.Provider value={value}>
+      {children}
+      <TaskEditSheet
+        task={editingTask}
+        open={Boolean(editingTask)}
+        onOpenChange={(open) => {
+          if (!open) setEditingTask(null);
+        }}
+      />
+    </RingoContext.Provider>
+  );
 }
 
 export function useRingo() {

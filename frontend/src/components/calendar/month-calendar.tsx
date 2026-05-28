@@ -14,10 +14,12 @@ import { ko } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getPlannerDayIso } from "@/lib/planner-day";
 import { cn } from "@/lib/utils";
 import { useRingo } from "@/hooks/use-ringo-store";
 
 const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
+const MAX_CHIPS = 3;
 
 export function MonthCalendar() {
   const router = useRouter();
@@ -26,7 +28,8 @@ export function MonthCalendar() {
     setCalendarMonth,
     selectedDate,
     setSelectedDate,
-    taskCountByDate,
+    getTasksForDate,
+    setEditingTask,
     hydrated,
   } = useRingo();
 
@@ -42,6 +45,7 @@ export function MonthCalendar() {
   const gridStart = startOfWeek(startOfMonth(monthStart), { weekStartsOn: 1 });
   const gridEnd = endOfWeek(endOfMonth(monthStart), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+  const plannerToday = getPlannerDayIso();
 
   const goMonth = (delta: number) => {
     const next = addMonths(monthStart, delta);
@@ -59,7 +63,7 @@ export function MonthCalendar() {
         <div>
           <h1 className="text-xl font-bold text-orange-950">캘린더</h1>
           <p className="text-sm text-muted-foreground">
-            날짜를 누르면 그날 플래너로 이동해요
+            일정을 눌러 수정 · 빈 칸을 누르면 플래너로 이동
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -75,13 +79,10 @@ export function MonthCalendar() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-3xl bg-white p-4 shadow-sm ring-1 ring-stone-200/60">
+      <div className="flex min-h-0 flex-1 flex-col rounded-3xl bg-white p-3 shadow-sm ring-1 ring-stone-200/60 md:p-4">
         <div className="mb-2 grid grid-cols-7 gap-1">
           {WEEKDAYS.map((w) => (
-            <div
-              key={w}
-              className="py-1 text-center text-xs font-medium text-stone-500"
-            >
+            <div key={w} className="py-1 text-center text-xs font-medium text-stone-500">
               {w}
             </div>
           ))}
@@ -92,36 +93,53 @@ export function MonthCalendar() {
             const iso = format(day, "yyyy-MM-dd");
             const inMonth = isSameMonth(day, monthStart);
             const isSelected = iso === selectedDate;
-            const count = taskCountByDate[iso] ?? 0;
-            const isToday = iso === format(new Date(), "yyyy-MM-dd");
+            const isToday = iso === plannerToday;
+            const dayTasks = getTasksForDate(iso);
+            const visible = dayTasks.slice(0, MAX_CHIPS);
+            const more = dayTasks.length - visible.length;
 
             return (
-              <button
+              <div
                 key={iso}
-                type="button"
-                onClick={() => pickDay(iso)}
                 className={cn(
-                  "flex min-h-[52px] flex-col items-center justify-start rounded-xl border p-1 text-sm transition-colors md:min-h-[72px]",
-                  inMonth ? "border-stone-100 bg-stone-50/50" : "border-transparent bg-transparent opacity-40",
-                  isSelected && "border-orange-400 bg-orange-50 ring-2 ring-orange-200",
-                  !isSelected && inMonth && "hover:border-orange-200 hover:bg-orange-50/60",
+                  "flex min-h-[72px] flex-col rounded-xl border p-0.5 md:min-h-[96px]",
+                  inMonth ? "border-stone-100 bg-stone-50/50" : "border-transparent opacity-40",
+                  isSelected && "border-orange-400 ring-2 ring-orange-200",
                 )}
               >
-                <span
+                <button
+                  type="button"
+                  onClick={() => pickDay(iso)}
                   className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium",
+                    "flex w-full shrink-0 items-center justify-center rounded-lg py-0.5 text-xs font-medium",
                     isToday && "bg-orange-500 text-white",
-                    !isToday && isSelected && "text-orange-700",
+                    !isToday && "text-stone-700 hover:bg-orange-50",
                   )}
                 >
                   {format(day, "d")}
-                </span>
-                {count > 0 && (
-                  <span className="mt-0.5 rounded-full bg-orange-400/90 px-1.5 text-[10px] font-medium text-white">
-                    {count}
-                  </span>
-                )}
-              </button>
+                </button>
+
+                <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden p-0.5">
+                  {visible.map((task) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTask(task);
+                      }}
+                      className="truncate rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-stone-800 md:text-[11px]"
+                      style={{ backgroundColor: task.categoryColor }}
+                      title={task.summary}
+                    >
+                      {task.timetableLabel || task.summary}
+                    </button>
+                  ))}
+                  {more > 0 && (
+                    <span className="px-1 text-[10px] text-stone-500">+{more}개</span>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
