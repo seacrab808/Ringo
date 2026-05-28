@@ -18,6 +18,8 @@ export function taskToDraft(task: PlannerTask): PendingTaskDraft {
     endTime: task.isTimeFixed ? isoToTimeString(task.endIso) : "",
     isTimeFixed: task.isTimeFixed,
     category: task.category,
+    isRecurring: Boolean(task.recurrence),
+    recurrence: task.recurrence,
   };
 }
 
@@ -50,12 +52,22 @@ export function draftToPlannerTask(
     deadlineIso = `${draft.plannedDate}T23:59:59+09:00`;
   }
 
+  const recurrence = draft.recurrence;
+  const byHour =
+    recurrence?.byHour ??
+    (startIso ? new Date(startIso).getHours() : undefined);
+
+  const finalRecurrence =
+    draft.isRecurring && recurrence
+      ? { ...recurrence, byHour, byMinute: recurrence.byMinute ?? 0 }
+      : undefined;
+
   return {
     id: newTaskId(),
     summary: draft.summary.trim(),
     timetableLabel: draft.summary.trim().slice(0, 12),
     isTimeFixed: draft.isTimeFixed && Boolean(draft.startTime),
-    plannedDate: draft.plannedDate || undefined,
+    plannedDate: finalRecurrence ? undefined : draft.plannedDate || undefined,
     startIso,
     endIso,
     deadlineIso: draft.isTimeFixed ? undefined : deadlineIso,
@@ -64,5 +76,6 @@ export function draftToPlannerTask(
     createdOrder: order,
     listOrder: order,
     completed: false,
+    recurrence: finalRecurrence,
   };
 }

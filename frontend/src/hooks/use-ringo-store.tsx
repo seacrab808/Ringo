@@ -14,7 +14,11 @@ import { ko } from "date-fns/locale";
 import { eventsToTasks, mergeTasks, parseSchedule } from "@/lib/api";
 import {
   USE_RINGO_DB,
+  cancelRecurrenceDate,
+  createCategoryApi,
   createTask,
+  deleteCategoryApi,
+  fetchCategories,
   fetchDiaries,
   fetchHealth,
   fetchTasks,
@@ -22,25 +26,43 @@ import {
   deleteTask as deleteTaskApi,
   patchTask,
   reorderTasksApi,
+  updateCategoryApi,
   upsertDiary,
 } from "@/lib/planner-api";
-import { getCategoryStyle } from "@/lib/categories";
+import {
+  defaultCategoryItems,
+  getCategoryStyle,
+  setCategoryRegistry,
+  slugifyCategory,
+} from "@/lib/categories";
 import { draftToPlannerTask, taskToDraft } from "@/lib/draft-task";
-import { countTasksByDate, filterTasksForDate, getTaskDateKey } from "@/lib/task-date";
+import {
+  countTasksByDateWithRecurrence,
+  expandTasksForDate,
+  parseInstanceId,
+} from "@/lib/recurrence";
+import { filterTasksForDate, getTaskDateKey } from "@/lib/task-date";
 import {
   assignAutoListOrder,
   ensureListOrder,
   orderByListOrder,
   reorderTasks,
 } from "@/lib/task-sort";
-import type { ChatMessage, PendingTaskDraft, PlannerTask } from "@/types/schedule";
+import type {
+  CategoryItem,
+  ChatMessage,
+  PendingTaskDraft,
+  PlannerTask,
+  TaskRecurrence,
+} from "@/types/schedule";
 
-const STORAGE_KEY = "ringo-planner-v4";
+const STORAGE_KEY = "ringo-planner-v5";
 
 interface RingoPersist {
   tasks: PlannerTask[];
   diaries: Record<string, string>;
   messages: ChatMessage[];
+  categories?: CategoryItem[];
   selectedDate: string;
   calendarMonth: string;
 }
@@ -124,6 +146,17 @@ interface RingoContextValue {
   onDragEnd: (source: number, dest: number) => void;
   toggleComplete: (id: string) => void;
   deleteTask: (id: string) => void;
+  categories: CategoryItem[];
+  addCategory: (label: string, colorHex: string) => void;
+  updateCategory: (slug: string, patch: Partial<CategoryItem>) => void;
+  removeCategory: (slug: string) => void;
+  addRecurringTask: (input: {
+    summary: string;
+    category: string;
+    recurrence: TaskRecurrence;
+    startIso?: string;
+    endIso?: string;
+  }) => void;
   hydrated: boolean;
 }
 
@@ -145,6 +178,11 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   const [parsing, setParsing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [dbEnabled, setDbEnabled] = useState(false);
+  const [categories, setCategories] = useState<CategoryItem[]>(defaultCategoryItems());
+
+  useEffect(() => {
+    setCategoryRegistry(categories);
+  }, [categories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +190,12 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     async function hydrate() {
       const saved = loadPersist();
       const initialDate = saved?.selectedDate ?? todayIso();
+
+      const initialCategories = saved?.categories?.length
+        ? saved.categories
+        : defaultCategoryItems();
+      setCategories(initialCategories);
+      setCategoryRegistry(initialCategories);
 
       if (saved) {
         setTasks(ensureListOrder(saved.tasks.length ? saved.tasks : SAMPLE_TASKS));
@@ -167,9 +211,10 @@ export function RingoProvider({ children }: { children: ReactNode }) {
           if (isDatabaseConnected(health)) {
             setDbEnabled(true);
             const { from, to } = syncDateRange(initialDate);
-            const [remoteTasks, remoteDiaries] = await Promise.all([
+            const [remoteTasks, remoteDiaries, remoteCats] = await Promise.all([
               fetchTasks(from, to),
               fetchDiaries(from, to),
+              fetchCategories().catch(() => [] as CategoryItem[]),
             ]);
             if (!cancelled) {
               if (remoteTasks.length > 0) {
@@ -177,6 +222,9 @@ export function RingoProvider({ children }: { children: ReactNode }) {
               }
               if (Object.keys(remoteDiaries).length > 0) {
                 setDiaries((prev) => ({ ...prev, ...remoteDiaries }));
+              }
+              if (remoteCats.length > 0) {
+                setCategories(remoteCats);
               }
             }
           }
@@ -200,18 +248,22 @@ export function RingoProvider({ children }: { children: ReactNode }) {
       tasks,
       diaries,
       messages,
+      categories,
       selectedDate,
       calendarMonth,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [tasks, diaries, messages, selectedDate, calendarMonth, hydrated]);
+  }, [tasks, diaries, messages, categories, selectedDate, calendarMonth, hydrated]);
 
   const tasksForDay = useMemo(
-    () => orderByListOrder(filterTasksForDate(tasks, selectedDate)),
+    () => orderByListOrder(expandTasksForDate(tasks, selectedDate)),
     [tasks, selectedDate],
   );
 
-  const taskCountByDate = useMemo(() => countTasksByDate(tasks), [tasks]);
+  const taskCountByDate = useMemo(
+    () => countTasksByDateWithRecurrence(tasks),
+    [tasks],
+  );
 
   const diary = diaries[selectedDate] ?? "";
 
@@ -247,7 +299,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
 
       try {
         const res = await parseSchedule(trimmed, selectedDate);
-        const newTasks = eventsToTasks(res.events, tasks.length, selectedDate);
+        const newTasks = eventsToTasks(res.events, tasks.length, selectedDate, trimmed);
         if (newTasks.length === 0) {
           const hint =
             res.unparsed_fragments.length > 0
@@ -413,12 +465,110 @@ export function RingoProvider({ children }: { children: ReactNode }) {
 
   const deleteTask = useCallback(
     (id: string) => {
+      const inst = parseInstanceId(id);
+      if (inst) {
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== inst.templateId || !t.recurrence) return t;
+            const cancelled = new Set(t.recurrence.cancelledDates ?? []);
+            cancelled.add(inst.dateIso);
+            return {
+              ...t,
+              recurrence: {
+                ...t.recurrence,
+                cancelledDates: [...cancelled],
+              },
+            };
+          }),
+        );
+        if (dbEnabled) {
+          cancelRecurrenceDate(inst.templateId, inst.dateIso).catch(() => undefined);
+        }
+        return;
+      }
       setTasks((prev) => prev.filter((t) => t.id !== id));
       if (dbEnabled) {
         deleteTaskApi(id).catch(() => undefined);
       }
     },
     [dbEnabled],
+  );
+
+  const addCategory = useCallback(
+    (label: string, colorHex: string) => {
+      const slug = slugifyCategory(label);
+      const item: CategoryItem = {
+        slug,
+        label,
+        colorHex,
+        sortOrder: categories.length,
+      };
+      setCategories((prev) => [...prev, item]);
+      if (dbEnabled) {
+        createCategoryApi(item).catch(() => undefined);
+      }
+    },
+    [categories.length, dbEnabled],
+  );
+
+  const updateCategory = useCallback(
+    (slug: string, patch: Partial<CategoryItem>) => {
+      setCategories((prev) =>
+        prev.map((c) => (c.slug === slug ? { ...c, ...patch } : c)),
+      );
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.category === slug && patch.colorHex
+            ? { ...t, categoryColor: patch.colorHex }
+            : t,
+        ),
+      );
+      if (dbEnabled) {
+        updateCategoryApi(slug, patch).catch(() => undefined);
+      }
+    },
+    [dbEnabled],
+  );
+
+  const removeCategory = useCallback(
+    (slug: string) => {
+      setCategories((prev) => prev.filter((c) => c.slug !== slug));
+      if (dbEnabled) {
+        deleteCategoryApi(slug).catch(() => undefined);
+      }
+    },
+    [dbEnabled],
+  );
+
+  const addRecurringTask = useCallback(
+    (input: {
+      summary: string;
+      category: string;
+      recurrence: TaskRecurrence;
+      startIso?: string;
+      endIso?: string;
+    }) => {
+      const style = getCategoryStyle(input.category);
+      const task: PlannerTask = {
+        id: crypto.randomUUID?.() ?? `task-${Date.now()}`,
+        summary: input.summary,
+        timetableLabel: input.summary.slice(0, 12),
+        isTimeFixed: true,
+        startIso: input.startIso,
+        endIso: input.endIso,
+        category: input.category,
+        categoryColor: style.bg,
+        createdOrder: tasks.length,
+        listOrder: tasks.length,
+        completed: false,
+        recurrence: input.recurrence,
+      };
+      setTasks((prev) => [...prev, task]);
+      if (dbEnabled) {
+        createTask(task).catch(() => undefined);
+      }
+    },
+    [tasks.length, dbEnabled],
   );
 
   const formattedDate = useMemo(() => {
@@ -446,6 +596,11 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     onDragEnd,
     toggleComplete,
     deleteTask,
+    categories,
+    addCategory,
+    updateCategory,
+    removeCategory,
+    addRecurringTask,
     hydrated,
   };
 

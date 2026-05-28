@@ -5,6 +5,11 @@ import type {
 } from "@/types/schedule";
 import { getCategoryStyle } from "@/lib/categories";
 import { newTaskId } from "@/lib/planner-api";
+import {
+  byDayFromKorean,
+  defaultSemesterRange,
+  mapRecurrenceFromApi,
+} from "@/lib/recurrence";
 import { assignAutoListOrder } from "@/lib/task-sort";
 
 const API_BASE =
@@ -77,18 +82,40 @@ export function eventsToTasks(
   events: ParsedScheduleEvent[],
   startOrder: number,
   fallbackDate?: string,
+  userText?: string,
 ): PlannerTask[] {
   const tasks: PlannerTask[] = events.map((ev, i) => {
     const style = getCategoryStyle(ev.category);
     const startIso = dtToIso(ev.start ?? undefined);
     const plannedDate = plannedDateFromEvent(ev, fallbackDate);
+    let recurrence =
+      mapRecurrenceFromApi(ev.recurrence_rule) ??
+      (byDayFromKorean(userText ?? ev.summary).length > 0
+        ? (() => {
+            const range = defaultSemesterRange(fallbackDate ?? new Date().toISOString().slice(0, 10));
+            const h = startIso ? new Date(startIso).getHours() : 14;
+            return {
+              frequency: "WEEKLY" as const,
+              byDay: byDayFromKorean(userText ?? ev.summary),
+              byHour: h,
+              semesterStart: range.semesterStart,
+              semesterEnd: range.semesterEnd,
+              cancelledDates: [] as string[],
+            };
+          })()
+        : undefined);
+
+    if (recurrence && startIso) {
+      recurrence = { ...recurrence, byHour: new Date(startIso).getHours() };
+    }
+
     return {
       id: newTaskId(),
       summary: ev.summary,
       timetableLabel: ev.timetable_label?.trim() || ev.summary,
       isTimeFixed: ev.is_time_fixed,
-      plannedDate,
-      startIso,
+      plannedDate: recurrence ? undefined : plannedDate,
+      startIso: recurrence ? startIso : startIso,
       endIso: dtToIso(ev.end ?? undefined),
       deadlineIso: dtToIso(ev.deadline ?? undefined),
       category: ev.category,
@@ -96,6 +123,7 @@ export function eventsToTasks(
       createdOrder: startOrder + i,
       listOrder: startOrder + i,
       completed: false,
+      recurrence,
     };
   });
   return tasks;

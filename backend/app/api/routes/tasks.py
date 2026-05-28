@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.deps import require_database, verify_api_token
 from app.repositories import tasks as task_repo
-from app.schemas.planner import TaskCreate, TaskOut, TaskReorderBody, TaskUpdate
+from app.schemas.planner import (
+    RecurrenceCancelBody,
+    TaskCreate,
+    TaskOut,
+    TaskReorderBody,
+    TaskUpdate,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -60,3 +66,16 @@ def reorder_tasks(
     __: None = Depends(require_database),
 ) -> list[TaskOut]:
     return task_repo.reorder_tasks(body.planned_date, body.task_ids)
+
+
+@router.post("/{task_id}/cancel-recurrence", response_model=TaskOut)
+def cancel_recurrence_occurrence(
+    task_id: UUID,
+    body: RecurrenceCancelBody,
+    _: None = Depends(verify_api_token),
+    __: None = Depends(require_database),
+) -> TaskOut:
+    updated = task_repo.cancel_recurrence_date(task_id, body.date)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return updated

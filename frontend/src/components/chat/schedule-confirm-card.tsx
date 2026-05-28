@@ -5,7 +5,7 @@ import { ko } from "date-fns/locale";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DEFAULT_CATEGORIES } from "@/lib/categories";
+import { getAllCategoryStyles } from "@/lib/categories";
 import type { PendingTaskDraft } from "@/types/schedule";
 
 interface ScheduleConfirmCardProps {
@@ -113,7 +113,7 @@ export function ScheduleConfirmCard({
             disabled={disabled}
             className="border-0 bg-transparent text-sm font-medium text-stone-800 outline-none"
           >
-            {Object.values(DEFAULT_CATEGORIES).map((c) => (
+            {getAllCategoryStyles().map((c) => (
               <option key={c.slug} value={c.slug}>
                 {c.label}
               </option>
@@ -121,6 +121,13 @@ export function ScheduleConfirmCard({
           </select>
         </label>
       </div>
+
+      {draft.isRecurring && draft.recurrence && (
+        <p className="mb-2 text-xs font-medium text-violet-700">
+          매주 반복 · {draft.recurrence.byDay.join(", ")} ·{" "}
+          {draft.recurrence.semesterStart} ~ {draft.recurrence.semesterEnd}
+        </p>
+      )}
 
       <p className="mb-3 text-xs text-muted-foreground">{dateLabel}</p>
 

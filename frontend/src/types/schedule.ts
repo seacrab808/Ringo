@@ -6,6 +6,26 @@ export interface CalendarDateTime {
   time_zone?: string;
 }
 
+export interface RecurrenceRulePayload {
+  frequency?: string;
+  by_day?: string[];
+  by_hour?: number | null;
+  by_minute?: number | null;
+  semester_start?: string | null;
+  semester_end?: string | null;
+  until?: string | null;
+}
+
+export interface TaskRecurrence {
+  frequency: "WEEKLY";
+  byDay: string[];
+  byHour?: number;
+  byMinute?: number;
+  semesterStart?: string;
+  semesterEnd?: string;
+  cancelledDates?: string[];
+}
+
 export interface ParsedScheduleEvent {
   summary: string;
   description?: string | null;
@@ -17,6 +37,7 @@ export interface ParsedScheduleEvent {
   timetable_label?: string | null;
   category: string;
   category_color?: string | null;
+  recurrence_rule?: RecurrenceRulePayload | null;
   parsing_notes?: string | null;
 }
 
@@ -34,7 +55,6 @@ export interface PlannerTask {
   summary: string;
   timetableLabel: string;
   isTimeFixed: boolean;
-  /** Calendar day this task appears on (YYYY-MM-DD). */
   plannedDate?: string;
   startIso?: string;
   endIso?: string;
@@ -42,9 +62,21 @@ export interface PlannerTask {
   category: string;
   categoryColor: string;
   createdOrder: number;
-  /** Display order (drag-and-drop); lower = higher in list. */
   listOrder: number;
   completed: boolean;
+  /** Weekly semester template (stored once, expanded per day in UI). */
+  recurrence?: TaskRecurrence;
+  /** Expanded instance of a recurring template. */
+  recurrenceInstance?: boolean;
+  templateId?: string;
+}
+
+export interface CategoryItem {
+  slug: string;
+  label: string;
+  colorHex: string;
+  sortOrder: number;
+  isBuiltin?: boolean;
 }
 
 /** Editable preview before registering a parsed schedule. */
@@ -56,6 +88,8 @@ export interface PendingTaskDraft {
   endTime: string;
   isTimeFixed: boolean;
   category: string;
+  isRecurring?: boolean;
+  recurrence?: TaskRecurrence;
 }
 
 export interface ChatMessage {
@@ -63,9 +97,7 @@ export interface ChatMessage {
   role: "user" | "ringo" | "error" | "confirm";
   text: string;
   at: string;
-  /** Shown when role === "confirm" — user edits then registers. */
   drafts?: PendingTaskDraft[];
-  /** Original utterance for "다시 말하기". */
   sourceText?: string;
   confirmed?: boolean;
 }

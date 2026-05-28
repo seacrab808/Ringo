@@ -165,7 +165,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8001
 | 1 | FastAPI + Ollama 자연어 파싱, Pydantic 스키마 | ✅ |
 | 2 | Next.js 플래너, 채팅, 확인 후 등록, Task DnD, 타임테이블 | ✅ |
 | 3 | Supabase 스키마, CRUD, 24h 타임테이블 API | ✅ |
-| 4 | 학기 반복 일정, 카테고리 커스터마이즈 | |
+| **4** ✅ | 학기 반복 일정, 카테고리 커스터마이즈 (`/settings`) | |
 | 5 | 노션형 Task 페이지, PDF RAG·요약 | |
 | 6 | 습관 트래커, GitHub 커밋 연동 | |
 | 7 | 야간 리마인더, 주/월 AI 리포트 | |

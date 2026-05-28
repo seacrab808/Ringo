@@ -1,4 +1,4 @@
-import type { PlannerTask } from "@/types/schedule";
+import type { CategoryItem, PlannerTask, TaskRecurrence } from "@/types/schedule";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
@@ -20,6 +20,25 @@ export interface ApiTask {
   created_order: number;
   list_order: number;
   completed: boolean;
+  recurrence?: ApiRecurrence | null;
+}
+
+interface ApiRecurrence {
+  frequency?: string;
+  by_day?: string[];
+  by_hour?: number | null;
+  by_minute?: number | null;
+  semester_start?: string | null;
+  semester_end?: string | null;
+  cancelled_dates?: string[];
+}
+
+export interface ApiCategory {
+  id: string;
+  slug: string;
+  label: string;
+  color_hex: string;
+  sort_order: number;
 }
 
 export interface ApiDiary {
@@ -74,6 +93,19 @@ export function isDatabaseConnected(health: ApiHealth): boolean {
   return health.database === "connected";
 }
 
+function apiRecurrenceToPlanner(raw?: ApiRecurrence | null): TaskRecurrence | undefined {
+  if (!raw?.by_day?.length) return undefined;
+  return {
+    frequency: "WEEKLY",
+    byDay: raw.by_day.map((d) => d.toUpperCase()),
+    byHour: raw.by_hour ?? undefined,
+    byMinute: raw.by_minute ?? undefined,
+    semesterStart: raw.semester_start ?? undefined,
+    semesterEnd: raw.semester_end ?? undefined,
+    cancelledDates: raw.cancelled_dates ?? [],
+  };
+}
+
 export function apiTaskToPlanner(t: ApiTask): PlannerTask {
   return {
     id: t.id,
@@ -89,6 +121,7 @@ export function apiTaskToPlanner(t: ApiTask): PlannerTask {
     createdOrder: t.created_order,
     listOrder: t.list_order,
     completed: t.completed,
+    recurrence: apiRecurrenceToPlanner(t.recurrence),
   };
 }
 
@@ -107,6 +140,17 @@ export function plannerTaskToApiCreate(t: PlannerTask): Record<string, unknown> 
     created_order: t.createdOrder,
     list_order: t.listOrder,
     completed: t.completed,
+    recurrence: t.recurrence
+      ? {
+          frequency: t.recurrence.frequency,
+          by_day: t.recurrence.byDay,
+          by_hour: t.recurrence.byHour ?? null,
+          by_minute: t.recurrence.byMinute ?? null,
+          semester_start: t.recurrence.semesterStart ?? null,
+          semester_end: t.recurrence.semesterEnd ?? null,
+          cancelled_dates: t.recurrence.cancelledDates ?? [],
+        }
+      : null,
   };
 }
 
@@ -126,6 +170,19 @@ export function plannerTaskToApiPatch(
   if (t.createdOrder !== undefined) body.created_order = t.createdOrder;
   if (t.listOrder !== undefined) body.list_order = t.listOrder;
   if (t.completed !== undefined) body.completed = t.completed;
+  if (t.recurrence !== undefined) {
+    body.recurrence = t.recurrence
+      ? {
+          frequency: t.recurrence.frequency,
+          by_day: t.recurrence.byDay,
+          by_hour: t.recurrence.byHour ?? null,
+          by_minute: t.recurrence.byMinute ?? null,
+          semester_start: t.recurrence.semesterStart ?? null,
+          semester_end: t.recurrence.semesterEnd ?? null,
+          cancelled_dates: t.recurrence.cancelledDates ?? [],
+        }
+      : null;
+  }
   return body;
 }
 
@@ -158,7 +215,75 @@ export async function createTask(task: PlannerTask): Promise<PlannerTask> {
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  await apiFetch<void>(`/api/v1/tasks/${id}`, { method: "DELETE" });
+  const baseId = id.split("@")[0];
+  await apiFetch<void>(`/api/v1/tasks/${baseId}`, { method: "DELETE" });
+}
+
+export async function cancelRecurrenceDate(
+  templateId: string,
+  dateIso: string,
+): Promise<PlannerTask> {
+  const row = await apiFetch<ApiTask>(
+    `/api/v1/tasks/${templateId}/cancel-recurrence`,
+    {
+      method: "POST",
+      body: JSON.stringify({ date: dateIso }),
+    },
+  );
+  return apiTaskToPlanner(row);
+}
+
+export async function fetchCategories(): Promise<CategoryItem[]> {
+  const rows = await apiFetch<ApiCategory[]>("/api/v1/categories");
+  return rows.map((c) => ({
+    slug: c.slug,
+    label: c.label,
+    colorHex: c.color_hex,
+    sortOrder: c.sort_order,
+    isBuiltin: false,
+  }));
+}
+
+export async function createCategoryApi(item: CategoryItem): Promise<CategoryItem> {
+  const row = await apiFetch<ApiCategory>("/api/v1/categories", {
+    method: "POST",
+    body: JSON.stringify({
+      slug: item.slug,
+      label: item.label,
+      color_hex: item.colorHex,
+      sort_order: item.sortOrder,
+    }),
+  });
+  return {
+    slug: row.slug,
+    label: row.label,
+    colorHex: row.color_hex,
+    sortOrder: row.sort_order,
+  };
+}
+
+export async function updateCategoryApi(
+  slug: string,
+  patch: Partial<CategoryItem>,
+): Promise<CategoryItem> {
+  const row = await apiFetch<ApiCategory>(`/api/v1/categories/${slug}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      label: patch.label,
+      color_hex: patch.colorHex,
+      sort_order: patch.sortOrder,
+    }),
+  });
+  return {
+    slug: row.slug,
+    label: row.label,
+    colorHex: row.color_hex,
+    sortOrder: row.sort_order,
+  };
+}
+
+export async function deleteCategoryApi(slug: string): Promise<void> {
+  await apiFetch<void>(`/api/v1/categories/${slug}`, { method: "DELETE" });
 }
 
 export async function patchTask(

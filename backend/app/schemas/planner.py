@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.recurrence import TaskRecurrence
+
 
 class TaskBase(BaseModel):
     summary: str = Field(min_length=1, max_length=500)
@@ -17,6 +19,7 @@ class TaskBase(BaseModel):
     created_order: int = 0
     list_order: int = 0
     completed: bool = False
+    recurrence: TaskRecurrence | None = None
 
 
 class TaskCreate(TaskBase):
@@ -36,6 +39,7 @@ class TaskUpdate(BaseModel):
     created_order: int | None = None
     list_order: int | None = None
     completed: bool | None = None
+    recurrence: TaskRecurrence | None = None
 
 
 class TaskOut(TaskBase):
@@ -48,7 +52,11 @@ class TaskOut(TaskBase):
 
 class TaskReorderBody(BaseModel):
     planned_date: date
-    task_ids: list[UUID] = Field(min_length=1)
+    task_ids: list[str] = Field(min_length=1)
+
+
+class RecurrenceCancelBody(BaseModel):
+    date: date
 
 
 class DiaryOut(BaseModel):

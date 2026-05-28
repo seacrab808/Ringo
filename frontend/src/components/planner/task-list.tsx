@@ -7,7 +7,7 @@ import {
   Droppable,
   type DropResult,
 } from "@hello-pangea/dnd";
-import { GripVertical, Trash2 } from "lucide-react";
+import { CalendarX2, GripVertical, Repeat, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getCategoryStyle } from "@/lib/categories";
@@ -74,7 +74,12 @@ export function TaskList({
                 {tasks.map((task, index) => {
                   const cat = getCategoryStyle(task.category);
                   return (
-                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                    <Draggable
+                      key={task.id}
+                      draggableId={task.id}
+                      index={index}
+                      isDragDisabled={Boolean(task.recurrenceInstance)}
+                    >
                       {(drag, snapshot) => (
                         <li
                           ref={drag.innerRef}
@@ -112,6 +117,12 @@ export function TaskList({
                                 {task.summary}
                               </p>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {task.recurrenceInstance && (
+                                  <Badge className="rounded-lg bg-white/80 text-[10px] text-violet-700">
+                                    <Repeat className="mr-0.5 inline h-3 w-3" />
+                                    매주
+                                  </Badge>
+                                )}
                                 <Badge
                                   variant="secondary"
                                   className="rounded-lg bg-white/70 text-[10px] font-normal text-stone-700"
@@ -143,9 +154,18 @@ export function TaskList({
                                   onDelete(task.id);
                                 }}
                                 className="rounded-lg p-1 text-stone-400 hover:bg-white/60 hover:text-red-600"
-                                aria-label="삭제"
+                                aria-label={
+                                  task.recurrenceInstance ? "오늘 휴강" : "삭제"
+                                }
+                                title={
+                                  task.recurrenceInstance ? "오늘만 휴강" : "삭제"
+                                }
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {task.recurrenceInstance ? (
+                                  <CalendarX2 className="h-4 w-4" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </button>
                               <div
                                 className="text-stone-500"

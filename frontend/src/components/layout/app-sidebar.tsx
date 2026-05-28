@@ -3,13 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, LayoutGrid, MessageCircle } from "lucide-react";
+import { CalendarDays, LayoutGrid, MessageCircle, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/planner", label: "오늘", icon: LayoutGrid, exact: true },
   { href: "/chat", label: "채팅", icon: MessageCircle },
   { href: "/calendar", label: "캘린더", icon: CalendarDays },
+  { href: "/settings", label: "설정", icon: Settings },
 ] as const;
 
 export function AppSidebar() {
