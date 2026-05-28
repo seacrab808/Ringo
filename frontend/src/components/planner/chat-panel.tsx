@@ -1,11 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Loader2 } from "lucide-react";
+import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useRingo } from "@/hooks/use-ringo-store";
 import { cn } from "@/lib/utils";
 
@@ -23,19 +22,11 @@ export function ChatPanel({ className }: ChatPanelProps) {
     retryDrafts,
   } = useRingo();
 
-  const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, parsing]);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || parsing) return;
-    sendChat(input);
-    setInput("");
-  };
 
   return (
     <div
@@ -57,7 +48,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
         </div>
         <div>
           <p className="font-semibold text-orange-950">Ringo</p>
-          <p className="text-xs text-muted-foreground">확인 후 등록</p>
+          <p className="text-xs text-muted-foreground">PDF 첨부 · 일정/학습지</p>
         </div>
       </div>
 
@@ -68,45 +59,21 @@ export function ChatPanel({ className }: ChatPanelProps) {
             parsing={parsing}
             onUpdateDraft={updateDraft}
             onConfirm={confirmDrafts}
-            onRetry={(id, source) => {
-              retryDrafts(id);
-              if (source) setInput(source);
-            }}
+            onRetry={(id, source) => retryDrafts(id)}
           />
           {parsing && (
             <div className="mr-auto flex items-center gap-2 rounded-2xl bg-orange-50 px-3.5 py-2 text-xs text-orange-800">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              일정 파싱 중… (첫 요청은 모델 로딩으로 20~40초 걸릴 수 있어요)
+              처리 중… (학습지는 1~3분 걸릴 수 있어요)
             </div>
           )}
           <div ref={bottomRef} className="h-1 shrink-0" />
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex shrink-0 gap-2 border-t border-orange-50 p-3"
-      >
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="이번주 금요일 2시에 …"
-          className="rounded-2xl border-orange-100 bg-orange-50/30 focus-visible:ring-orange-300"
-          disabled={parsing}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={parsing || !input.trim()}
-          className="shrink-0 rounded-2xl bg-orange-500 hover:bg-orange-600"
-        >
-          {parsing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-        </Button>
-      </form>
+      <div className="shrink-0 border-t border-orange-50 p-3">
+        <ChatComposer parsing={parsing} onSend={sendChat} />
+      </div>
     </div>
   );
 }

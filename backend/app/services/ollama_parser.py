@@ -31,6 +31,7 @@ from app.services.korean_schedule import (
     dedupe_similar_events,
     normalize_korean_text,
 )
+from app.services.korean_text import repair_summary
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ def _adjust_datetime_for_korean_weekday(
 def _build_user_prompt(req: NaturalLanguageParseRequest, ref: Date) -> str:
     """Compact prompt — full JSON schema was ~1.7k chars and slowed inference."""
     weekday = _WEEKDAY_KO[ref.weekday()]
-    return (
+    prompt = (
         f"reference_date: {ref.isoformat()} ({weekday}요일)\n"
         f"timezone: {req.timezone}\n"
         f"allow_multiple_events: {req.allow_multiple_events}\n"
@@ -123,6 +124,12 @@ def _build_user_prompt(req: NaturalLanguageParseRequest, ref: Date) -> str:
         "Hangul-only summaries.\n\n"
         f"User message:\n{req.text.strip()}"
     )
+    if req.attachment_context:
+        prompt += (
+            "\n\n[첨부 PDF 발췌 — 일정·주제 파악에 참고, 없는 일정은 만들지 말 것]\n"
+            f"{req.attachment_context[:10000]}"
+        )
+    return prompt
 
 
 def _parse_iso_datetime(value: str | None, tz: str) -> datetime | None:
@@ -251,8 +258,10 @@ def _coerce_event(
         is_fixed = True
 
     kind = _coerce_schedule_kind(raw, is_fixed, deadline is not None)
-    summary = normalize_korean_text(
+    summary = repair_summary(
         _resolve_summary(raw, root_summary=root_summary, user_text=user_text),
+        user_text,
+        fallback=root_summary,
     )
     ev = ParsedScheduleEvent(
         summary=summary,

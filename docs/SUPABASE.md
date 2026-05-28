@@ -3,8 +3,13 @@
 ## 1. 프로젝트 생성
 
 1. [Supabase](https://supabase.com)에서 새 프로젝트 생성
-2. **SQL Editor** → `supabase/migrations/20260527000000_initial.sql` 내용 실행  
-   (또는 CLI: `supabase db push`)
+2. **SQL Editor**에서 마이그레이션 순서대로 실행 (또는 CLI: `supabase db push`):
+   - `20260527000000_initial.sql`
+   - `20260527100000_recurrence.sql` (있으면)
+   - `20260528120000_task_pages_rag.sql`
+   - `20260528140000_pgvector_embeddings.sql`
+3. **Storage** → 버킷 `ringo-attachments` 생성 (private, service role로 업로드)
+4. **Ollama** → `ollama pull nomic-embed-text` (RAG 임베딩용)
 
 ## 2. 백엔드 환경 변수
 

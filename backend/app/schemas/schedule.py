@@ -228,6 +228,11 @@ class NaturalLanguageParseRequest(BaseModel):
         default=True,
         description="Parse multiple events from one sentence if present.",
     )
+    attachment_context: str | None = Field(
+        default=None,
+        max_length=12000,
+        description="Extracted text from chat PDF attachments.",
+    )
 
 
 class NaturalLanguageParseResponse(BaseModel):

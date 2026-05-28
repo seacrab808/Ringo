@@ -92,12 +92,31 @@ export interface PendingTaskDraft {
   recurrence?: TaskRecurrence;
 }
 
+export interface ChatAttachmentRef {
+  id: string;
+  filename: string;
+  preview?: string;
+}
+
+export interface PendingStudyGuide {
+  markdown: string;
+  model: string;
+  chatAttachmentIds: string[];
+  studyGuidePdfBase64?: string;
+}
+
 export interface ChatMessage {
   id: string;
-  role: "user" | "ringo" | "error" | "confirm";
+  role: "user" | "ringo" | "error" | "confirm" | "study_guide";
   text: string;
   at: string;
   drafts?: PendingTaskDraft[];
   sourceText?: string;
   confirmed?: boolean;
+  attachments?: ChatAttachmentRef[];
+  studyGuideMarkdown?: string;
+  studyGuidePdfBase64?: string;
+  fewShotUsed?: string[];
+  pendingStudyGuide?: PendingStudyGuide;
+  linkedTaskId?: string;
 }

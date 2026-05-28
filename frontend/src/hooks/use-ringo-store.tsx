@@ -45,6 +45,7 @@ import {
   createWelcomeMessages,
   getPlannerDayIso,
 } from "@/lib/planner-day";
+import { addDaysToIso, getCalendarDayIso, isoToMonthKey } from "@/lib/ringo-timezone";
 import { applyTaskEdit, type TaskEditPatch } from "@/lib/task-edit";
 import { filterTasksForDate, getTaskDateKey } from "@/lib/task-date";
 import {
@@ -67,6 +68,7 @@ const STORAGE_KEY = "ringo-planner-v6";
 interface RingoPersist {
   tasks: PlannerTask[];
   diaries: Record<string, string>;
+  comments?: Record<string, string>;
   messages: ChatMessage[];
   categories?: CategoryItem[];
   selectedDate: string;
@@ -79,7 +81,7 @@ function todayIso(): string {
 }
 
 function monthIso(d = new Date()): string {
-  return format(d, "yyyy-MM");
+  return isoToMonthKey(getCalendarDayIso(d));
 }
 
 const SAMPLE_TASKS: PlannerTask[] = (() => {
@@ -140,9 +142,14 @@ interface RingoContextValue {
   taskCountByDate: Record<string, number>;
   diary: string;
   setDiary: (text: string) => void;
+  comment: string;
+  setComment: (text: string) => void;
   messages: ChatMessage[];
   parsing: boolean;
-  sendChat: (text: string) => void;
+  sendChat: (
+    text: string,
+    attachments?: import("@/lib/chat-api").ChatAttachmentUpload[],
+  ) => void;
   updateDraft: (
     messageId: string,
     draftId: string,
@@ -179,6 +186,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   const [calendarMonth, setCalendarMonth] = useState(monthIso);
   const [tasks, setTasks] = useState<PlannerTask[]>(SAMPLE_TASKS);
   const [diaries, setDiaries] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [messages, setMessages] = useState<ChatMessage[]>(createWelcomeMessages());
   const [parsing, setParsing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -189,7 +197,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
 
   const beginPlannerSession = useCallback((plannerDay: string) => {
     setSelectedDate(plannerDay);
-    setCalendarMonth(format(new Date(plannerDay + "T12:00:00"), "yyyy-MM"));
+    setCalendarMonth(isoToMonthKey(plannerDay));
     setMessages(createWelcomeMessages());
     setLastPlannerSessionDay(plannerDay);
   }, []);
@@ -220,12 +228,13 @@ export function RingoProvider({ children }: { children: ReactNode }) {
       if (saved) {
         setTasks(ensureListOrder(saved.tasks.length ? saved.tasks : SAMPLE_TASKS));
         setDiaries(saved.diaries ?? {});
+        setComments(saved.comments ?? {});
         if (isNewPlannerDay) {
           beginPlannerSession(plannerToday);
         } else {
           setMessages(saved.messages);
           setSelectedDate(plannerToday);
-          setCalendarMonth(format(new Date(plannerToday + "T12:00:00"), "yyyy-MM"));
+          setCalendarMonth(isoToMonthKey(plannerToday));
           setLastPlannerSessionDay(plannerToday);
         }
       } else {
@@ -287,6 +296,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     const payload: RingoPersist = {
       tasks,
       diaries,
+      comments,
       messages,
       categories,
       selectedDate,
@@ -297,6 +307,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   }, [
     tasks,
     diaries,
+    comments,
     messages,
     categories,
     selectedDate,
@@ -321,10 +332,18 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   );
 
   const diary = diaries[selectedDate] ?? "";
+  const comment = comments[selectedDate] ?? "";
 
   const setDiary = useCallback(
     (text: string) => {
       setDiaries((prev) => ({ ...prev, [selectedDate]: text }));
+    },
+    [selectedDate],
+  );
+
+  const setComment = useCallback(
+    (text: string) => {
+      setComments((prev) => ({ ...prev, [selectedDate]: text }));
     },
     [selectedDate],
   );
@@ -345,20 +364,102 @@ export function RingoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sendChat = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      attachments: import("@/lib/chat-api").ChatAttachmentUpload[] = [],
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed && attachments.length === 0) return;
 
-      addMessage({ role: "user", text: trimmed });
+      addMessage({
+        role: "user",
+        text: trimmed || "(PDF 첨부)",
+        attachments: attachments.map((a) => ({
+          id: a.id,
+          filename: a.filename,
+          preview: a.preview,
+        })),
+      });
       setParsing(true);
 
       try {
-        const res = await parseSchedule(trimmed, selectedDate);
-        const newTasks = eventsToTasks(res.events, tasks.length, selectedDate, trimmed);
+        const { sendChatMessage } = await import("@/lib/chat-api");
+        const res = await sendChatMessage({
+          text: trimmed || "첨부한 강의 자료를 바탕으로 학습지를 만들어줘",
+          attachment_ids: attachments.map((a) => a.id),
+          reference_date: selectedDate,
+        });
+
+        if (res.kind === "study_guide" && res.study_guide_markdown) {
+          const pendingStudyGuide = {
+            markdown: res.study_guide_markdown,
+            model: res.study_guide_model ?? "unknown",
+            chatAttachmentIds: attachments.map((a) => a.id),
+            studyGuidePdfBase64: res.study_guide_pdf_base64,
+          };
+          const hasSchedule = Boolean(res.parse?.events?.length);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}-study`,
+              role: "study_guide",
+              text: hasSchedule
+                ? "학습지를 생성했어요! 아래 일정을 확인하고 등록하면 Task 페이지에 자료·학습지가 저장돼요."
+                : "학습지를 생성했어요! (일정은 자동 인식하지 못했어요 — 시간·과목을 포함해 다시 말하거나 수동으로 등록해 주세요.)",
+              at: new Date().toISOString(),
+              studyGuideMarkdown: res.study_guide_markdown,
+              studyGuidePdfBase64: res.study_guide_pdf_base64,
+              fewShotUsed: res.few_shot_used,
+            },
+          ]);
+
+          if (hasSchedule && res.parse) {
+            const newTasks = eventsToTasks(
+              res.parse.events,
+              tasks.length,
+              selectedDate,
+              trimmed,
+            );
+            if (newTasks.length > 0) {
+              const drafts = newTasks.map((t) => taskToDraft(t));
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `msg-${Date.now()}-confirm`,
+                  role: "confirm",
+                  text: "일정 확인",
+                  at: new Date().toISOString(),
+                  drafts,
+                  sourceText: trimmed,
+                  pendingStudyGuide,
+                },
+              ]);
+            }
+          } else if (res.parse_error) {
+            addMessage({
+              role: "ringo",
+              text: `일정 파싱은 건너뛰었어요 (${res.parse_error}). 학습지만 채팅에 표시됩니다.`,
+            });
+          }
+          return;
+        }
+
+        const parsed = res.parse;
+        if (!parsed) {
+          addMessage({ role: "ringo", text: "응답을 처리하지 못했어요." });
+          return;
+        }
+
+        const newTasks = eventsToTasks(
+          parsed.events,
+          tasks.length,
+          selectedDate,
+          trimmed,
+        );
         if (newTasks.length === 0) {
           const hint =
-            res.unparsed_fragments.length > 0
-              ? `\n\n(파서 메모: ${res.unparsed_fragments.slice(0, 2).join("; ")})`
+            parsed.unparsed_fragments.length > 0
+              ? `\n\n(파서 메모: ${parsed.unparsed_fragments.slice(0, 2).join("; ")})`
               : "";
           addMessage({
             role: "ringo",
@@ -460,6 +561,23 @@ export function RingoProvider({ children }: { children: ReactNode }) {
         return `· ${t.summary}${day ? ` — ${day}` : ""}${time ? ` ${time}` : ""}`;
       });
 
+      let taskPageNote = "";
+      const linkedId = saved[0]?.id;
+      if (msg.pendingStudyGuide && linkedId) {
+        try {
+          const { importStudyGuideFromChat } = await import("@/lib/task-page-api");
+          await importStudyGuideFromChat(linkedId, {
+            markdown: msg.pendingStudyGuide.markdown,
+            model: msg.pendingStudyGuide.model,
+            chat_attachment_ids: msg.pendingStudyGuide.chatAttachmentIds,
+          });
+          taskPageNote = `\n\n📎 Task 페이지에 강의 자료·학습지를 저장했어요.`;
+        } catch {
+          taskPageNote =
+            "\n\n⚠️ 일정은 등록됐지만 Task 페이지 저장에 실패했어요. Task 화면에서 자료를 다시 올려 주세요.";
+        }
+      }
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === messageId
@@ -467,8 +585,10 @@ export function RingoProvider({ children }: { children: ReactNode }) {
                 ...m,
                 confirmed: true,
                 drafts: undefined,
+                pendingStudyGuide: undefined,
+                linkedTaskId: linkedId,
                 role: "ringo",
-                text: `등록했어!\n${lines.join("\n")}`,
+                text: `등록했어!\n${lines.join("\n")}${taskPageNote}`,
               }
             : m,
         ),
@@ -664,6 +784,8 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     taskCountByDate,
     diary,
     setDiary,
+    comment,
+    setComment,
     messages,
     parsing,
     sendChat,

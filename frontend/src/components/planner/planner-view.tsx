@@ -3,6 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRingo } from "@/hooks/use-ringo-store";
 import { ChatPanel } from "./chat-panel";
+import { CommentSection } from "./comment-section";
 import { DiarySection } from "./diary-section";
 import { PlannerHeader } from "./planner-header";
 import { TaskList } from "./task-list";
@@ -12,10 +13,11 @@ export function PlannerView() {
   const {
     selectedDate,
     setSelectedDate,
-    formattedDate,
     tasksForDay,
     diary,
     setDiary,
+    comment,
+    setComment,
     onDragEnd,
     toggleComplete,
     deleteTask,
@@ -35,7 +37,6 @@ export function PlannerView() {
     <div className="flex h-full flex-col gap-4 overflow-hidden">
       <div className="shrink-0 px-4 pt-4 pb-1 md:px-6 md:pt-5">
         <PlannerHeader
-          formattedDate={formattedDate}
           selectedDate={selectedDate}
           onDateChange={setSelectedDate}
           taskCount={tasksForDay.length}
@@ -48,14 +49,17 @@ export function PlannerView() {
         </div>
         <div className="flex min-h-0 min-w-0 flex-col gap-3">
           <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(200px,240px)]">
-            <TaskList
-              className="h-full min-h-0"
-              tasks={tasksForDay}
-              onDragEnd={onDragEnd}
-              onToggleComplete={toggleComplete}
-              onDelete={deleteTask}
-              onEdit={setEditingTask}
-            />
+            <div className="flex min-h-0 flex-col gap-3">
+              <CommentSection value={comment} onChange={setComment} />
+              <TaskList
+                className="min-h-0 flex-1"
+                tasks={tasksForDay}
+                onDragEnd={onDragEnd}
+                onToggleComplete={toggleComplete}
+                onDelete={deleteTask}
+                onEdit={setEditingTask}
+              />
+            </div>
             <Timetable
               className="h-full min-h-0"
               tasks={tasksForDay}
@@ -81,14 +85,17 @@ export function PlannerView() {
             className="mt-0 flex min-h-0 flex-1 flex-col gap-3 data-[state=inactive]:hidden"
           >
             <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-2">
-              <TaskList
-                className="min-h-[280px]"
-                tasks={tasksForDay}
-                onDragEnd={onDragEnd}
-                onToggleComplete={toggleComplete}
-                onDelete={deleteTask}
-                onEdit={setEditingTask}
-              />
+              <div className="flex min-h-0 flex-col gap-3">
+                <CommentSection value={comment} onChange={setComment} />
+                <TaskList
+                  className="min-h-[200px] flex-1"
+                  tasks={tasksForDay}
+                  onDragEnd={onDragEnd}
+                  onToggleComplete={toggleComplete}
+                  onDelete={deleteTask}
+                  onEdit={setEditingTask}
+                />
+              </div>
               <Timetable
                 className="min-h-[280px]"
                 tasks={tasksForDay}

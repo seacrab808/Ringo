@@ -14,6 +14,13 @@ export function PlannerHomeRedirect() {
   useEffect(() => {
     if (!hydrated || didRedirect.current) return;
     didRedirect.current = true;
+    if (
+      pathname === "/planner" ||
+      pathname.startsWith("/tasks/") ||
+      pathname === "/cafeteria"
+    ) {
+      return;
+    }
     if (pathname !== "/planner") {
       router.replace("/planner");
     }

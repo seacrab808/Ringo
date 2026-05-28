@@ -54,12 +54,10 @@ export function blockToRowSegments(
 export function getTaskBlockRange(
   startIso: string,
   endIso: string,
-  dayStart: Date,
+  axisStart: Date,
 ): { startSlot: number; span: number } | null {
   const start = new Date(startIso);
   const end = new Date(endIso);
-  const axisStart = new Date(dayStart);
-  axisStart.setHours(TIMETABLE_START_HOUR, 0, 0, 0);
 
   const axisEnd = new Date(axisStart);
   axisEnd.setMinutes(axisEnd.getMinutes() + TIMETABLE_SLOT_COUNT * MINUTES_PER_SLOT);

@@ -8,6 +8,7 @@ import {
   SLOTS_PER_HOUR,
   TIMETABLE_HOUR_COUNT,
 } from "@/lib/planner-hours";
+import { plannerDayAxisStart } from "@/lib/ringo-timezone";
 import { cn } from "@/lib/utils";
 import type { PlannerTask } from "@/types/schedule";
 
@@ -19,7 +20,7 @@ interface TimetableProps {
 
 export function Timetable({ tasks, dayIso, className }: TimetableProps) {
   const hours = useMemo(() => buildTimetableHours(), []);
-  const dayStart = useMemo(() => new Date(`${dayIso}T00:00:00`), [dayIso]);
+  const axisStart = useMemo(() => plannerDayAxisStart(dayIso), [dayIso]);
 
   const timedTasks = tasks.filter((t) => t.isTimeFixed && t.startIso && t.endIso);
 
@@ -33,7 +34,7 @@ export function Timetable({ tasks, dayIso, className }: TimetableProps) {
     }> = [];
 
     for (const task of timedTasks) {
-      const range = getTaskBlockRange(task.startIso!, task.endIso!, dayStart);
+        const range = getTaskBlockRange(task.startIso!, task.endIso!, axisStart);
       if (!range) continue;
       const segments = blockToRowSegments(range.startSlot, range.span);
       segments.forEach((seg, i) => {
@@ -48,7 +49,7 @@ export function Timetable({ tasks, dayIso, className }: TimetableProps) {
     }
 
     return out;
-  }, [timedTasks, dayStart]);
+  }, [timedTasks, axisStart]);
 
   return (
     <div
@@ -57,11 +58,8 @@ export function Timetable({ tasks, dayIso, className }: TimetableProps) {
         className,
       )}
     >
-      <div className="shrink-0 border-b border-stone-100 px-3 py-2">
+      <div className="shrink-0 border-b border-stone-100 px-3 py-2.5">
         <h2 className="text-sm font-semibold tracking-wide text-stone-800">TIMETABLE</h2>
-        <p className="text-[10px] text-muted-foreground">
-          06:00 → 익일 05:00 · 10분 단위
-        </p>
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">

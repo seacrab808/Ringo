@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ExternalLink } from "lucide-react";
 import {
   DragDropContext,
   Draggable,
@@ -51,8 +53,7 @@ export function TaskList({
       )}
     >
       <div className="shrink-0 border-b border-stone-100 px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-wide text-stone-800">TASK</h2>
-        <p className="text-xs text-muted-foreground">⋮⋮ 잡고 드래그해서 순서 변경</p>
+        <h2 className="text-sm font-semibold tracking-wide text-stone-800">TASKS</h2>
       </div>
 
       {!dndReady ? (
@@ -109,21 +110,29 @@ export function TaskList({
                             >
                               {task.completed ? "✓" : ""}
                             </button>
+                            <div className="min-w-0 flex-1">
                             <button
                               type="button"
-                              className="min-w-0 flex-1 text-left"
+                              className="w-full text-left"
                               onClick={() => onEdit(task)}
                             >
                               <p
                                 className={cn(
-                                  "flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-medium leading-snug text-stone-900",
+                                  "flex flex-wrap items-center gap-x-2 gap-y-1 leading-snug",
                                   task.completed && "line-through opacity-60",
                                 )}
                               >
-                                <span className="shrink-0 text-stone-700">
+                                <span
+                                  className="inline-flex shrink-0 items-center rounded-full border border-solid bg-white/75 px-2 py-0.5 text-sm font-medium text-stone-800"
+                                  style={{
+                                    borderColor: task.categoryColor || cat.color,
+                                  }}
+                                >
                                   {cat.label}
                                 </span>
-                                <span className="hover:underline">{task.summary}</span>
+                                <span className="text-base font-medium text-stone-900 hover:underline">
+                                  {task.summary}
+                                </span>
                               </p>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                 {task.recurrenceInstance && (
@@ -149,6 +158,15 @@ export function TaskList({
                                 )}
                               </div>
                             </button>
+                            <Link
+                              href={`/tasks/${task.id}`}
+                              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-stone-600 hover:text-orange-800"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              페이지
+                            </Link>
+                            </div>
                             <div className="mt-0.5 flex shrink-0 flex-col items-center gap-0.5">
                               <button
                                 type="button"

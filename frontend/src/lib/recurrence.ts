@@ -4,6 +4,12 @@ import type {
   TaskRecurrence,
 } from "@/types/schedule";
 import { getTaskDateKey, taskMatchesDate } from "@/lib/task-date";
+import {
+  addDaysToIso,
+  getCalendarDayIso,
+  getWeekdayInKst,
+  parseIsoDateAtNoonKst,
+} from "@/lib/ringo-timezone";
 
 const BYDAY_IDX: Record<string, number> = {
   MO: 0,
@@ -52,7 +58,7 @@ export function byDayFromKorean(text: string): string[] {
 export function mapRecurrenceFromApi(raw?: RecurrenceRulePayload | null): TaskRecurrence | undefined {
   if (!raw || !raw.by_day?.length) return undefined;
   const { semesterStart, semesterEnd } = defaultSemesterRange(
-    raw.semester_start ?? new Date().toISOString().slice(0, 10),
+    raw.semester_start ?? getCalendarDayIso(),
   );
   return {
     frequency: "WEEKLY",
@@ -69,7 +75,7 @@ export function occursOnDate(rule: TaskRecurrence, dateIso: string): boolean {
   if (rule.cancelledDates?.includes(dateIso)) return false;
   if (rule.semesterStart && dateIso < rule.semesterStart) return false;
   if (rule.semesterEnd && dateIso > rule.semesterEnd) return false;
-  const wd = new Date(dateIso + "T12:00:00").getDay();
+  const wd = getWeekdayInKst(dateIso);
   const mondayBased = wd === 0 ? 6 : wd - 1;
   return rule.byDay.some((d) => BYDAY_IDX[d] === mondayBased);
 }
@@ -90,7 +96,7 @@ export function expandTaskForDate(template: PlannerTask, dateIso: string): Plann
 
   const sh = rule.byHour ?? (template.startIso ? new Date(template.startIso).getHours() : 9);
   const sm = rule.byMinute ?? 0;
-  const start = new Date(`${dateIso}T12:00:00`);
+  const start = parseIsoDateAtNoonKst(dateIso);
   start.setHours(sh, sm, 0, 0);
 
   let end: Date;
@@ -131,12 +137,10 @@ export function iterOccurrenceDates(
   toIso: string,
 ): string[] {
   const out: string[] = [];
-  let cur = new Date(fromIso + "T12:00:00");
-  const end = new Date(toIso + "T12:00:00");
-  while (cur <= end) {
-    const iso = cur.toISOString().slice(0, 10);
-    if (occursOnDate(rule, iso)) out.push(iso);
-    cur.setDate(cur.getDate() + 1);
+  let cur = fromIso;
+  while (cur <= toIso) {
+    if (occursOnDate(rule, cur)) out.push(cur);
+    cur = addDaysToIso(cur, 1);
   }
   return out;
 }

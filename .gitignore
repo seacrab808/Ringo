@@ -42,5 +42,12 @@ Thumbs.db
 tmp/
 .cache/
 
+# Task page uploads (local dev)
+backend/storage/
+storage/
+
+# Cafeteria cache
+backend/storage/cafeteria_cache/
+
 # Supabase local
 .supabase/
