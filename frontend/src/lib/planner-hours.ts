@@ -5,30 +5,50 @@ export const MINUTES_PER_SLOT = 10;
 export const TIMETABLE_HOUR_COUNT = 24;
 export const TIMETABLE_SLOT_COUNT = TIMETABLE_HOUR_COUNT * SLOTS_PER_HOUR;
 
-export interface TimetableSlot {
+export interface TimetableHourRow {
   index: number;
   hour: number;
-  minute: number;
-  /** Show hour:00 label in the left gutter */
-  showHourLabel: boolean;
   isNextDay: boolean;
 }
 
-export function buildTimetableSlots(): TimetableSlot[] {
-  const slots: TimetableSlot[] = [];
-  for (let i = 0; i < TIMETABLE_SLOT_COUNT; i++) {
-    const totalMinutes = TIMETABLE_START_HOUR * 60 + i * MINUTES_PER_SLOT;
-    const hour = Math.floor(totalMinutes / 60) % 24;
-    const minute = totalMinutes % 60;
-    slots.push({
+export interface TimetableBlockSegment {
+  row: number;
+  col: number;
+  colSpan: number;
+}
+
+export function buildTimetableHours(): TimetableHourRow[] {
+  const rows: TimetableHourRow[] = [];
+  for (let i = 0; i < TIMETABLE_HOUR_COUNT; i++) {
+    const totalMinutes = TIMETABLE_START_HOUR * 60 + i * 60;
+    rows.push({
       index: i,
-      hour,
-      minute,
-      showHourLabel: minute === 0,
+      hour: Math.floor(totalMinutes / 60) % 24,
       isNextDay: totalMinutes >= 24 * 60,
     });
   }
-  return slots;
+  return rows;
+}
+
+/** Split a 10-min block into per-hour row segments (6 columns per row). */
+export function blockToRowSegments(
+  startSlot: number,
+  span: number,
+): TimetableBlockSegment[] {
+  const segments: TimetableBlockSegment[] = [];
+  let slot = startSlot;
+  let remaining = span;
+
+  while (remaining > 0) {
+    const row = Math.floor(slot / SLOTS_PER_HOUR);
+    const col = slot % SLOTS_PER_HOUR;
+    const take = Math.min(remaining, SLOTS_PER_HOUR - col);
+    segments.push({ row, col, colSpan: take });
+    slot += take;
+    remaining -= take;
+  }
+
+  return segments;
 }
 
 export function getTaskBlockRange(

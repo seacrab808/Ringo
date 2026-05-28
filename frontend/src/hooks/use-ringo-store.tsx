@@ -224,9 +224,9 @@ export function RingoProvider({ children }: { children: ReactNode }) {
           beginPlannerSession(plannerToday);
         } else {
           setMessages(saved.messages);
-          setSelectedDate(saved.selectedDate);
-          setCalendarMonth(saved.calendarMonth ?? monthIso());
-          setLastPlannerSessionDay(saved.lastPlannerSessionDay ?? plannerToday);
+          setSelectedDate(plannerToday);
+          setCalendarMonth(format(new Date(plannerToday + "T12:00:00"), "yyyy-MM"));
+          setLastPlannerSessionDay(plannerToday);
         }
       } else {
         beginPlannerSession(plannerToday);

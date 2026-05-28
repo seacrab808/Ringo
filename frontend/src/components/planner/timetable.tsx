@@ -2,11 +2,11 @@
 
 import { useMemo } from "react";
 import {
-  buildTimetableSlots,
+  blockToRowSegments,
+  buildTimetableHours,
   getTaskBlockRange,
-  MINUTES_PER_SLOT,
   SLOTS_PER_HOUR,
-  TIMETABLE_SLOT_COUNT,
+  TIMETABLE_HOUR_COUNT,
 } from "@/lib/planner-hours";
 import { cn } from "@/lib/utils";
 import type { PlannerTask } from "@/types/schedule";
@@ -18,23 +18,36 @@ interface TimetableProps {
 }
 
 export function Timetable({ tasks, dayIso, className }: TimetableProps) {
-  const slots = useMemo(() => buildTimetableSlots(), []);
+  const hours = useMemo(() => buildTimetableHours(), []);
   const dayStart = useMemo(() => new Date(`${dayIso}T00:00:00`), [dayIso]);
 
   const timedTasks = tasks.filter((t) => t.isTimeFixed && t.startIso && t.endIso);
 
-  const blocks = useMemo(() => {
-    return timedTasks
-      .map((task) => {
-        const range = getTaskBlockRange(task.startIso!, task.endIso!, dayStart);
-        if (!range) return null;
-        return { task, ...range };
-      })
-      .filter(Boolean) as Array<{
+  const blockSegments = useMemo(() => {
+    const out: Array<{
       task: PlannerTask;
-      startSlot: number;
-      span: number;
-    }>;
+      row: number;
+      col: number;
+      colSpan: number;
+      showLabel: boolean;
+    }> = [];
+
+    for (const task of timedTasks) {
+      const range = getTaskBlockRange(task.startIso!, task.endIso!, dayStart);
+      if (!range) continue;
+      const segments = blockToRowSegments(range.startSlot, range.span);
+      segments.forEach((seg, i) => {
+        out.push({
+          task,
+          row: seg.row,
+          col: seg.col,
+          colSpan: seg.colSpan,
+          showLabel: i === 0,
+        });
+      });
+    }
+
+    return out;
   }, [timedTasks, dayStart]);
 
   return (
@@ -51,63 +64,60 @@ export function Timetable({ tasks, dayIso, className }: TimetableProps) {
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden p-1.5">
+      <div className="relative min-h-0 flex-1 overflow-hidden p-1.5">
         <div
-          className="relative grid h-full w-full"
-          style={{
-            gridTemplateRows: `repeat(${TIMETABLE_SLOT_COUNT}, minmax(0, 1fr))`,
-          }}
+          className="grid h-full w-full"
+          style={{ gridTemplateRows: `repeat(${TIMETABLE_HOUR_COUNT}, minmax(0, 1fr))` }}
         >
-          {slots.map((slot) => {
-            const isHourEnd = slot.index % SLOTS_PER_HOUR === SLOTS_PER_HOUR - 1;
-            return (
-              <div
-                key={slot.index}
-                className={cn(
-                  "col-span-full grid grid-cols-[2rem_1fr] items-stretch",
-                  slot.isNextDay && "bg-stone-50/40",
-                  isHourEnd ? "border-b border-stone-200/70" : "border-b border-stone-100/50",
-                )}
-                style={{ gridRow: slot.index + 1 }}
-              >
-                <div className="relative flex items-start justify-end pr-1">
-                  {slot.showHourLabel && (
-                    <span className="text-[9px] font-medium tabular-nums leading-none text-stone-500">
-                      {slot.hour.toString().padStart(2, "0")}:00
-                    </span>
-                  )}
-                </div>
+          {hours.map((row) => (
+            <div
+              key={row.index}
+              className={cn(
+                "grid min-h-0 grid-cols-[2rem_repeat(6,minmax(0,1fr))] border-b border-stone-200/70",
+                row.isNextDay && "bg-stone-50/40",
+              )}
+              style={{ gridRow: row.index + 1 }}
+            >
+              <div className="flex items-start justify-end pr-1 pt-0.5">
+                <span className="text-[9px] font-medium tabular-nums leading-none text-stone-500">
+                  {row.hour.toString().padStart(2, "0")}:00
+                </span>
+              </div>
+              {Array.from({ length: SLOTS_PER_HOUR }, (_, col) => (
                 <div
+                  key={col}
                   className={cn(
-                    "border-l border-dashed border-stone-200/70",
-                    slot.minute > 0 && slot.minute % (MINUTES_PER_SLOT * 2) === 0 && "bg-stone-50/30",
+                    "border-l border-dashed border-stone-200/60",
+                    col > 0 && col % 2 === 0 && "bg-stone-50/25",
                   )}
                 />
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
+        </div>
 
-          <div
-            className="pointer-events-none absolute inset-0 left-8 grid"
-            style={{
-              gridTemplateRows: `repeat(${TIMETABLE_SLOT_COUNT}, minmax(0, 1fr))`,
-            }}
-          >
-            {blocks.map(({ task, startSlot, span }) => (
-              <div
-                key={task.id}
-                className="pointer-events-auto mx-0.5 flex items-center overflow-hidden rounded-md px-1.5 text-[10px] font-medium leading-tight text-stone-800 shadow-sm ring-1 ring-black/5"
-                style={{
-                  gridRow: `${startSlot + 1} / span ${span}`,
-                  backgroundColor: task.categoryColor,
-                  alignSelf: "stretch",
-                }}
-                title={`${task.summary} (${task.startIso?.slice(11, 16)}–${task.endIso?.slice(11, 16)})`}
-              >
-                <span className="line-clamp-2">{task.timetableLabel}</span>
-              </div>
-            ))}
-          </div>
+        <div
+          className="pointer-events-none absolute inset-1.5 left-[calc(0.375rem+2rem)] grid"
+          style={{
+            gridTemplateRows: `repeat(${TIMETABLE_HOUR_COUNT}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${SLOTS_PER_HOUR}, minmax(0, 1fr))`,
+          }}
+        >
+          {blockSegments.map(({ task, row, col, colSpan, showLabel }, i) => (
+            <div
+              key={`${task.id}-${row}-${col}-${i}`}
+              className="pointer-events-auto mx-px flex items-center overflow-hidden rounded-sm px-1 text-[10px] font-medium leading-tight text-stone-800 shadow-sm ring-1 ring-black/5"
+              style={{
+                gridRow: row + 1,
+                gridColumn: `${col + 1} / span ${colSpan}`,
+                backgroundColor: task.categoryColor,
+                alignSelf: "stretch",
+              }}
+              title={`${task.summary} (${task.startIso?.slice(11, 16)}–${task.endIso?.slice(11, 16)})`}
+            >
+              {showLabel && <span className="line-clamp-2">{task.timetableLabel}</span>}
+            </div>
+          ))}
         </div>
       </div>
     </div>
