@@ -19,6 +19,7 @@ import {
   fetchHealth,
   fetchTasks,
   isDatabaseConnected,
+  deleteTask as deleteTaskApi,
   patchTask,
   reorderTasksApi,
   upsertDiary,
@@ -122,6 +123,7 @@ interface RingoContextValue {
   retryDrafts: (messageId: string) => void;
   onDragEnd: (source: number, dest: number) => void;
   toggleComplete: (id: string) => void;
+  deleteTask: (id: string) => void;
   hydrated: boolean;
 }
 
@@ -344,7 +346,9 @@ export function RingoProvider({ children }: { children: ReactNode }) {
           d && format(new Date(d + "T12:00:00"), "M/d (EEE)", { locale: ko });
         const time =
           t.isTimeFixed && t.startIso
-            ? format(new Date(t.startIso), "HH:mm")
+            ? t.endIso
+              ? `${format(new Date(t.startIso), "HH:mm")}–${format(new Date(t.endIso), "HH:mm")}`
+              : format(new Date(t.startIso), "HH:mm")
             : "";
         return `· ${t.summary}${day ? ` — ${day}` : ""}${time ? ` ${time}` : ""}`;
       });
@@ -407,6 +411,16 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     [dbEnabled],
   );
 
+  const deleteTask = useCallback(
+    (id: string) => {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      if (dbEnabled) {
+        deleteTaskApi(id).catch(() => undefined);
+      }
+    },
+    [dbEnabled],
+  );
+
   const formattedDate = useMemo(() => {
     const d = new Date(selectedDate + "T12:00:00");
     return format(d, "M월 d일 EEEE", { locale: ko });
@@ -431,6 +445,7 @@ export function RingoProvider({ children }: { children: ReactNode }) {
     retryDrafts,
     onDragEnd,
     toggleComplete,
+    deleteTask,
     hydrated,
   };
 

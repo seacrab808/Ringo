@@ -23,7 +23,12 @@ def require_database() -> None:
 
 async def get_http_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     settings = get_settings()
-    timeout = httpx.Timeout(settings.ollama_timeout_seconds)
+    timeout = httpx.Timeout(
+        connect=settings.ollama_connect_timeout_seconds,
+        read=30.0,
+        write=10.0,
+        pool=5.0,
+    )
     async with httpx.AsyncClient(timeout=timeout) as client:
         yield client
 

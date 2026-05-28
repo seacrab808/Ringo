@@ -7,7 +7,7 @@ import {
   Droppable,
   type DropResult,
 } from "@hello-pangea/dnd";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getCategoryStyle } from "@/lib/categories";
@@ -18,6 +18,7 @@ interface TaskListProps {
   tasks: PlannerTask[];
   onDragEnd: (source: number, dest: number) => void;
   onToggleComplete: (id: string) => void;
+  onDelete: (id: string) => void;
   className?: string;
 }
 
@@ -25,6 +26,7 @@ export function TaskList({
   tasks,
   onDragEnd,
   onToggleComplete,
+  onDelete,
   className,
 }: TaskListProps) {
   const [dndReady, setDndReady] = useState(false);
@@ -77,7 +79,6 @@ export function TaskList({
                         <li
                           ref={drag.innerRef}
                           {...drag.draggableProps}
-                          {...drag.dragHandleProps}
                           className={cn(
                             "rounded-2xl touch-none",
                             snapshot.isDragging &&
@@ -134,8 +135,24 @@ export function TaskList({
                                 )}
                               </div>
                             </div>
-                            <div className="mt-1 shrink-0 text-stone-500">
-                              <GripVertical className="h-5 w-5" />
+                            <div className="mt-0.5 flex shrink-0 flex-col items-center gap-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete(task.id);
+                                }}
+                                className="rounded-lg p-1 text-stone-400 hover:bg-white/60 hover:text-red-600"
+                                aria-label="삭제"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                              <div
+                                className="text-stone-500"
+                                {...drag.dragHandleProps}
+                              >
+                                <GripVertical className="h-5 w-5" />
+                              </div>
                             </div>
                           </div>
                         </li>

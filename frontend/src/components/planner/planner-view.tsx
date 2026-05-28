@@ -18,6 +18,7 @@ export function PlannerView() {
     setDiary,
     onDragEnd,
     toggleComplete,
+    deleteTask,
     hydrated,
   } = useRingo();
 
@@ -51,6 +52,7 @@ export function PlannerView() {
               tasks={tasksForDay}
               onDragEnd={onDragEnd}
               onToggleComplete={toggleComplete}
+              onDelete={deleteTask}
             />
             <Timetable className="h-full" tasks={tasksForDay} dayIso={selectedDate} />
           </div>
@@ -78,6 +80,7 @@ export function PlannerView() {
                 tasks={tasksForDay}
                 onDragEnd={onDragEnd}
                 onToggleComplete={toggleComplete}
+                onDelete={deleteTask}
               />
               <Timetable
                 className="min-h-[280px]"

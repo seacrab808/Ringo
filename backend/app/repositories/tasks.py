@@ -77,7 +77,7 @@ def update_task(task_id: UUID, data: TaskUpdate) -> TaskOut | None:
     client = get_supabase()
     payload = _task_payload(data, partial=True)
     if not payload:
-        return await get_task(task_id)
+        return get_task(task_id)
     resp = (
         client.table("ringo_tasks")
         .update(payload)

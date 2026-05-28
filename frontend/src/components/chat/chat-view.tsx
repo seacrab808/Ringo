@@ -70,7 +70,7 @@ export function ChatView() {
           {parsing && (
             <div className="mr-auto flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm text-orange-800 shadow-sm ring-1 ring-orange-100">
               <Loader2 className="h-4 w-4 animate-spin" />
-              일정 파싱 중…
+              일정 파싱 중… (첫 요청은 모델 로딩으로 20~40초 걸릴 수 있어요)
             </div>
           )}
           <div ref={bottomRef} />

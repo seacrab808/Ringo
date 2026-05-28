@@ -25,7 +25,11 @@ from app.schemas.schedule import (
     ParsedScheduleEvent,
     RecurrenceRule,
     ScheduleKind,
-    parsed_event_json_schema,
+)
+from app.services.korean_schedule import (
+    apply_user_time_range,
+    dedupe_similar_events,
+    normalize_korean_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,8 +51,10 @@ Rules:
 8. Multiple events in one sentence → multiple objects in `events`.
 9. EVERY object inside `events` MUST include its own `summary` string (never leave summary only at the root).
 10. Use reference_date weekday to resolve "이번주 금요일" correctly (금요일 = Friday of that week).
-11. "1시부터 5시까지" → start 13:00, end 17:00 on the same day.
-12. Unclear parts → unparsed_fragments array.
+11. "1시부터 5시" (no 오전) on the same day → afternoon 13:00–17:00; always set BOTH start and end.
+12. ALL summary/timetable_label text MUST be Korean Hangul only — never Chinese/Japanese characters (use 교수 not 教授).
+13. One real-world event per sentence → prefer ONE event object (do not split into duplicates).
+14. Unclear parts → unparsed_fragments array.
 
 Examples:
 - "이번주 금요일 오후 2시 딥러닝 수업" → timed, summary="딥러닝 수업", category="class", start 14:00 that Friday.
@@ -104,13 +110,17 @@ def _adjust_datetime_for_korean_weekday(
 
 
 def _build_user_prompt(req: NaturalLanguageParseRequest, ref: Date) -> str:
-    schema = json.dumps(parsed_event_json_schema(), ensure_ascii=False)
+    """Compact prompt — full JSON schema was ~1.7k chars and slowed inference."""
     weekday = _WEEKDAY_KO[ref.weekday()]
     return (
         f"reference_date: {ref.isoformat()} ({weekday}요일)\n"
         f"timezone: {req.timezone}\n"
-        f"allow_multiple_events: {req.allow_multiple_events}\n\n"
-        f"JSON schema for your response:\n{schema}\n\n"
+        f"allow_multiple_events: {req.allow_multiple_events}\n"
+        'Respond with JSON: {"events":[...],"unparsed_fragments":[]}\n'
+        "Each event: summary (required), is_time_fixed, schedule_kind "
+        "(timed|deadline|flexible), category slug, "
+        "start.date_time AND end.date_time when a range is given (ISO +09:00). "
+        "Hangul-only summaries.\n\n"
         f"User message:\n{req.text.strip()}"
     )
 
@@ -241,7 +251,9 @@ def _coerce_event(
         is_fixed = True
 
     kind = _coerce_schedule_kind(raw, is_fixed, deadline is not None)
-    summary = _resolve_summary(raw, root_summary=root_summary, user_text=user_text)
+    summary = normalize_korean_text(
+        _resolve_summary(raw, root_summary=root_summary, user_text=user_text),
+    )
     ev = ParsedScheduleEvent(
         summary=summary,
         description=raw.get("description"),
@@ -255,14 +267,17 @@ def _coerce_event(
         is_time_fixed=is_fixed,
         is_all_day=bool(raw.get("is_all_day", False)),
         deadline=deadline,
-        timetable_label=raw.get("timetable_label"),
+        timetable_label=normalize_korean_text(str(raw.get("timetable_label") or "")) or None,
         category=_coerce_category_slug(raw.get("category")),
         category_color=raw.get("category_color"),
         confidence=float(raw.get("confidence") if raw.get("confidence") is not None else 0.8),
         raw_user_text=user_text,
         parsing_notes=raw.get("parsing_notes"),
     )
-    return ev.with_default_end()
+    ev = ev.with_default_end()
+    if reference_date is not None:
+        ev = apply_user_time_range(ev, user_text, reference_date, tz)
+    return ev
 
 
 class OllamaScheduleParser:
@@ -308,6 +323,7 @@ class OllamaScheduleParser:
 
         raw_json = await self._call_ollama(req, ref, client=client)
         events, unparsed = self._extract_events(raw_json, req.text, req.timezone, ref)
+        events = dedupe_similar_events(events)
 
         latency_ms = (time.perf_counter() - t0) * 1000
         return NaturalLanguageParseResponse(
@@ -327,13 +343,15 @@ class OllamaScheduleParser:
         client: httpx.AsyncClient | None = None,
     ) -> dict[str, Any]:
         url = f"{self._settings.ollama_base_url.rstrip('/')}/api/chat"
+        user_content = _build_user_prompt(req, ref)
         payload = {
             "model": self._settings.ollama_model,
             "stream": False,
             "format": "json",
+            "keep_alive": self._settings.ollama_keep_alive,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(req, ref)},
+                {"role": "user", "content": user_content},
             ],
             "options": {
                 "temperature": 0.1,
@@ -344,12 +362,25 @@ class OllamaScheduleParser:
         http = client or self._client
         owns_client = http is None
         if owns_client:
-            timeout = httpx.Timeout(self._settings.ollama_timeout_seconds)
+            timeout = httpx.Timeout(
+                connect=self._settings.ollama_connect_timeout_seconds,
+                read=self._settings.ollama_timeout_seconds,
+                write=10.0,
+                pool=5.0,
+            )
             http = httpx.AsyncClient(timeout=timeout)
 
         try:
             assert http is not None
+            logger.info(
+                "Ollama parse request | model=%s prompt_chars=%d num_predict=%d",
+                self._settings.ollama_model,
+                len(SYSTEM_PROMPT) + len(user_content),
+                self._settings.ollama_num_predict,
+            )
+            t_call = time.perf_counter()
             resp = await http.post(url, json=payload)
+            logger.info("Ollama response in %.0fms", (time.perf_counter() - t_call) * 1000)
             if resp.status_code == 404:
                 err_msg = self._ollama_error_message(resp)
                 raise OllamaConnectionError(err_msg)

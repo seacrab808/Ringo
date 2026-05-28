@@ -76,7 +76,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
           {parsing && (
             <div className="mr-auto flex items-center gap-2 rounded-2xl bg-orange-50 px-3.5 py-2 text-xs text-orange-800">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              일정 파싱 중…
+              일정 파싱 중… (첫 요청은 모델 로딩으로 20~40초 걸릴 수 있어요)
             </div>
           )}
           <div ref={bottomRef} className="h-1 shrink-0" />

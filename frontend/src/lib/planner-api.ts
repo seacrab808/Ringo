@@ -157,6 +157,10 @@ export async function createTask(task: PlannerTask): Promise<PlannerTask> {
   return apiTaskToPlanner(row);
 }
 
+export async function deleteTask(id: string): Promise<void> {
+  await apiFetch<void>(`/api/v1/tasks/${id}`, { method: "DELETE" });
+}
+
 export async function patchTask(
   id: string,
   patch: Partial<PlannerTask>,

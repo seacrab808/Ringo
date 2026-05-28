@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-import httpx
 
-from app.core.deps import get_http_client, verify_api_token
+from app.core.deps import verify_api_token
 from app.core.exceptions import OllamaConnectionError, OllamaParseError
 from app.schemas.schedule import (
     NaturalLanguageParseRequest,
@@ -24,7 +23,6 @@ router = APIRouter(prefix="/parse", tags=["parse"])
 async def parse_schedule(
     payload: NaturalLanguageParseRequest,
     _: None = Depends(verify_api_token),
-    client: httpx.AsyncClient = Depends(get_http_client),
 ) -> NaturalLanguageParseResponse:
     """
     사용자 채팅 문장을 Ollama로 파싱해 구조화된 일정 목록을 반환합니다.
@@ -34,7 +32,7 @@ async def parse_schedule(
     """
     parser = OllamaScheduleParser()
     try:
-        return await parser.parse(payload, client=client)
+        return await parser.parse(payload)
     except OllamaConnectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -55,12 +53,11 @@ async def parse_schedule_with_tasks(
     payload: NaturalLanguageParseRequest,
     start_order: int = 0,
     _: None = Depends(verify_api_token),
-    client: httpx.AsyncClient = Depends(get_http_client),
 ) -> dict:
     """Parse NL text and return sorted task rows for the dashboard Tasks column."""
     parser = OllamaScheduleParser()
     try:
-        parsed = await parser.parse(payload, client=client)
+        parsed = await parser.parse(payload)
     except OllamaConnectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

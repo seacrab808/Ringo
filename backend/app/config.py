@@ -20,12 +20,26 @@ class Settings(BaseSettings):
         validation_alias="OLLAMA_MODEL",
     )
     ollama_timeout_seconds: float = Field(
-        default=120.0,
+        default=90.0,
         validation_alias="OLLAMA_TIMEOUT_SECONDS",
     )
+    ollama_connect_timeout_seconds: float = Field(
+        default=5.0,
+        validation_alias="OLLAMA_CONNECT_TIMEOUT_SECONDS",
+    )
     ollama_num_predict: int = Field(
-        default=1024,
+        default=384,
         validation_alias="OLLAMA_NUM_PREDICT",
+        description="Max tokens to generate; schedule JSON needs far less than 1024",
+    )
+    ollama_keep_alive: str = Field(
+        default="15m",
+        validation_alias="OLLAMA_KEEP_ALIVE",
+        description="Keep model loaded in Ollama between requests",
+    )
+    ollama_warmup_on_start: bool = Field(
+        default=True,
+        validation_alias="OLLAMA_WARMUP_ON_START",
     )
 
     ringo_api_prefix: str = Field(

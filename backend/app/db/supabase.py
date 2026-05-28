@@ -17,12 +17,20 @@ def get_supabase() -> Client:
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
+def _supabase_ping() -> bool:
+    client = get_supabase()
+    client.table("ringo_tasks").select("id").limit(1).execute()
+    return True
+
+
 def supabase_health_ok() -> bool:
     if not get_settings().supabase_enabled:
         return False
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
     try:
-        client = get_supabase()
-        client.table("ringo_tasks").select("id").limit(1).execute()
-        return True
-    except Exception:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_supabase_ping)
+            return fut.result(timeout=3.0)
+    except (FuturesTimeout, Exception):
         return False

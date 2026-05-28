@@ -19,24 +19,40 @@ function getAuthHeaders(): HeadersInit {
   return headers;
 }
 
+const PARSE_TIMEOUT_MS = 90_000;
+
 export async function parseSchedule(
   text: string,
   referenceDate?: string,
 ): Promise<NaturalLanguageParseResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/parse/schedule`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
-      text,
-      reference_date: referenceDate,
-      timezone: "Asia/Seoul",
-    }),
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(detail || `Parse failed (${res.status})`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PARSE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/parse/schedule`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      signal: controller.signal,
+      body: JSON.stringify({
+        text,
+        reference_date: referenceDate,
+        timezone: "Asia/Seoul",
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(detail || `Parse failed (${res.status})`);
+    }
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        "파싱이 90초 넘게 걸렸어. Ollama가 켜져 있는지, 백엔드(8001)가 응답하는지 확인해줘.",
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 function dtToIso(dt?: { date_time?: string | null; date?: string | null } | null): string | undefined {
